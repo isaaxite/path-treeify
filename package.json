@@ -1,0 +1,26 @@
+{
+  "name": "path-treeify",
+  "version": "0.0.1",
+  "description": "Convert a path or an array of paths into a tree-structured JavaScript object, where each node has a `parent` property that holds a circular reference to its parent node.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/isaaxite/path-treeify.git"
+  },
+  "keywords": [
+    "path",
+    "treeify",
+    "js-object",
+    "reference",
+    "cycle"
+  ],
+  "author": "isaaxite",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/isaaxite/path-treeify/issues"
+  },
+  "homepage": "https://github.com/isaaxite/path-treeify#readme"
+}
