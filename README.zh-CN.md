@@ -1,11 +1,8 @@
 # path-treeify
 
-> 📖 [中文文档 (Chinese README)](https://github.com/isaaxite/path-treeify/blob/main/README.zh-CN.md)
+> 📖 [English README](https://github.com/isaaxite/path-treeify/blob/main/README.md)
 
-<div align="left">
-  <!-- <h1>Path-Treeify</h1> -->
-  <p>Convert a path or an array of paths into a tree-structured JavaScript object, where each node holds a circular reference to its parent. </p>
-</div>
+将一个路径或路径数组转换为树形 JavaScript 对象，每个节点均持有指向父节点的循环引用。
 
 <div align="left">
   <a href="https://isaaxite.indevs.in">
@@ -36,23 +33,23 @@
 
 ---
 
-## Features
+## 功能特性
 
-- 🌲 Builds a recursive tree from one or more directory paths
-- 🔗 Each node carries a `parent` circular reference for upward traversal
-- 🔍 Optional `filter` callback to include/exclude directories during scanning
-- 📦 Ships as both ESM (`index.mjs`) and CJS (`index.cjs`) with full TypeScript types
-- 🚫 Zero runtime dependencies
+- 🌲 从一个或多个目录路径构建递归树结构
+- 🔗 每个节点携带 `parent` 循环引用，支持向上遍历
+- 🔍 可选 `filter` 回调，用于在扫描时包含/排除目录
+- 📦 同时提供 ESM（`index.mjs`）与 CJS（`index.cjs`），附带完整 TypeScript 类型声明
+- 🚫 零运行时依赖
 
 ---
 
-## Requirements
+## 环境要求
 
 - Node.js `>= 18.0.0`
 
 ---
 
-## Installation
+## 安装
 
 ```bash
 npm install path-treeify
@@ -64,14 +61,14 @@ yarn add path-treeify
 
 ---
 
-## Quick Start
+## 快速上手
 
 ```ts
 import { PathTreeify } from 'path-treeify';
 
 const treeify = new PathTreeify({ base: '/your/project/root' });
 
-// Scan the whole base directory
+// 扫描指定的目录
 const tree = treeify.buildByDirPaths(['src', 'tests']);
 
 console.log(tree);
@@ -91,14 +88,14 @@ console.log(tree);
 
 ### `new PathTreeify(options)`
 
-Creates a new instance.
+创建一个新实例。
 
-| Option   | Type                          | Required | Description                                       |
-|----------|-------------------------------|----------|---------------------------------------------------|
-| `base`   | `string`                      | ✅        | Absolute path to the root directory to scan from |
-| `filter` | `FilterFunction` (see below)  | ❌        | Called for every directory found during traversal |
+| 选项     | 类型                          | 是否必填 | 说明                                 |
+|----------|-------------------------------|----------|--------------------------------------|
+| `base`   | `string`                      | ✅        | 扫描的根目录绝对路径                  |
+| `filter` | `FilterFunction`（见下方）    | ❌        | 遍历时对每个目录调用的过滤函数        |
 
-`base` must exist and be a directory, otherwise the constructor throws.
+`base` 必须存在且为目录，否则构造函数会抛出错误。
 
 ---
 
@@ -106,14 +103,14 @@ Creates a new instance.
 
 ```ts
 type FilterFunction = (params: {
-  name: string;    // directory name (leaf segment)
-  dirPath: string; // absolute path of the parent directory
+  name: string;    // 目录名称（路径末段）
+  dirPath: string; // 父目录的绝对路径
 }) => boolean;
 ```
 
-Return `true` to **include** the directory and recurse into it; `false` to **skip** it.
+返回 `true` 表示**保留**该目录并继续递归；返回 `false` 表示**跳过**。
 
-**Example — skip hidden directories and `node_modules`:**
+**示例 — 跳过隐藏目录和 `node_modules`：**
 
 ```ts
 const treeify = new PathTreeify({
@@ -126,21 +123,21 @@ const treeify = new PathTreeify({
 
 ### `buildByDirPaths(paths: string[]): PathTreeNode`
 
-Scans the given relative directory paths (resolved against `base`) and returns a synthetic root `PathTreeNode` whose `children` are the top-level nodes you requested.
+扫描给定的相对目录路径（以 `base` 为基准解析），返回一个合成根节点 `PathTreeNode`，其 `children` 即为你请求的顶层节点。
 
 ```ts
 const root = treeify.buildByDirPaths(['src', 'docs']);
 ```
 
-- Each element of `paths` must be a valid, accessible directory relative to `base`.
-- Leading and trailing slashes are stripped automatically.
-- Throws if any path does not exist or is not a directory.
+- `paths` 中的每一项都必须是相对于 `base` 的有效可访问目录。
+- 前后多余的斜杠会被自动去除。
+- 若任意路径不存在或不是目录，则抛出错误。
 
 ---
 
 ### `getPathBy(node: PathTreeNode): { relative: string; absolute: string }`
 
-Walks a node's `parent` chain to reconstruct its full path.
+沿节点的 `parent` 链向上还原完整路径。
 
 ```ts
 const srcNode = root.children[0];
@@ -155,19 +152,19 @@ const { relative, absolute } = treeify.getPathBy(srcNode);
 
 ```ts
 interface PathTreeNode {
-  parent:   PathTreeNode | null; // null only on the synthetic root
-  value:    string;              // directory name for this node
+  parent:   PathTreeNode | null; // 仅合成根节点为 null
+  value:    string;              // 当前节点的目录名
   children: PathTreeNode[];
 }
 ```
 
-> ⚠️ **Circular references** — `parent` points back up the tree. Use `JSON.stringify` replacers or a library like `flatted` if you need to serialize the result.
+> ⚠️ **循环引用** — `parent` 指向树的上层节点。若需要序列化结果，请使用 `JSON.stringify` 的替换函数，或借助 `flatted` 等库处理循环引用。
 
 ---
 
-## Examples
+## 示例
 
-### Scan an entire directory
+### 扫描整个目录
 
 ```ts
 import { PathTreeify } from 'path-treeify';
@@ -176,7 +173,7 @@ import { readdirSync } from 'fs';
 const base = '/your/project';
 const treeify = new PathTreeify({ base });
 
-// Collect all top-level directories
+// 获取所有顶级目录
 const topLevel = readdirSync(base, { withFileTypes: true })
   .filter(d => d.isDirectory())
   .map(d => d.name);
@@ -184,7 +181,7 @@ const topLevel = readdirSync(base, { withFileTypes: true })
 const tree = treeify.buildByDirPaths(topLevel);
 ```
 
-### Retrieve absolute paths while walking
+### 遍历时获取绝对路径
 
 ```ts
 function printPaths(node, treeify) {
@@ -198,7 +195,7 @@ function printPaths(node, treeify) {
 printPaths(tree, treeify);
 ```
 
-### CommonJS usage
+### CommonJS 用法
 
 ```js
 const { PathTreeify } = require('path-treeify');
@@ -209,6 +206,6 @@ const tree = treeify.buildByDirPaths(['src']);
 
 ---
 
-## License
+## 许可证
 
 [MIT](./LICENSE) © [isaaxite](https://github.com/isaaxite)

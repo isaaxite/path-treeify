@@ -7,10 +7,10 @@ interface PathTreeifyProps {
   filter?: FilterFunction;
 }
 
-interface Node {
-  parent: Node | null;
+interface PathTreeNode {
+  parent: PathTreeNode | null;
   value: string;
-  children: Node[];
+  children: PathTreeNode[];
 }
 
 class PathValidator {
@@ -33,8 +33,8 @@ class PathValidator {
 }
 
 export class PathTreeify {
-  base: string;
-  filter?: FilterFunction;
+  private base: string;
+  private filter?: FilterFunction;
 
   constructor({ filter, base }: Partial<PathTreeifyProps>) {
     if (typeof filter !== 'undefined') {
@@ -72,13 +72,13 @@ export class PathTreeify {
     }
   }
 
-  private initNode(parent: Node | null = null): Node {
+  private initNode(parent: PathTreeNode | null = null): PathTreeNode {
     return { parent, value: '', children: [] };
   }
 
-  private buildChildren(dirPath: string, parent: Node) {
+  private buildChildren(dirPath: string, parent: PathTreeNode) {
     const names = readdirSync(dirPath);
-    const children: Array<Node> = [];
+    const children: Array<PathTreeNode> = [];
     for (const name of names) {
       const subPath = join(dirPath, name);
       if (!statSync(subPath).isDirectory()) {
@@ -122,31 +122,36 @@ export class PathTreeify {
     }
   }
 
-  private formatDirnames(dirNames: string[]): string[] {
-    return dirNames.map(dir => {
+  private formatDirnames(nameOfDirs: string[]): string[] {
+    return nameOfDirs.map(dir => {
       // 移除开头的 / 和结尾的 /
       return dir.replace(/^\/+|\/+$/g, '');
     }).filter(dir => dir !== ''); // 可选：过滤掉空字符串
   }
 
-  getPathBy(node: Node): string {
-    if (!node.parent) {
-      return '';
+  getPathBy(node: PathTreeNode): { relative: string; absolute: string } {
+    let relative = '';
+    let current = node;
+    while (current.parent) {
+      relative = relative
+        ? `${current.value}${sep}${relative}`
+        : current.value;
+      current = current.parent;
     }
-    const sup = this.getPathBy(node.parent);
-    return sup ? `${sup}${sep}${node.value}` : node.value;
+    
+    return { relative, absolute: resolve(this.base, relative) };
   }
 
-  buildByDirPaths(propDirNames: string[]) {
+  buildByDirPaths(nameOfDirs: string[]) {
     const root = this.initNode();
-    this.checkRelatePaths(propDirNames);
-    const dirNames = this.formatDirnames(propDirNames);
+    this.checkRelatePaths(nameOfDirs);
+    const dirNames = this.formatDirnames(nameOfDirs);
 
     for (const dirName of dirNames) {
       const node = this.initNode();
       node.value = dirName;
       node.parent = root;
-      node.children = this.buildChildren(dirName, node);
+      node.children = this.buildChildren(resolve(this.base, dirName), node);
       root.children.push(node);
     }
 
