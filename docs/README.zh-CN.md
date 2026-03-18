@@ -5,11 +5,8 @@
 将一个路径或路径数组转换为树形 JavaScript 对象，每个节点均持有指向父节点的循环引用。
 
 <div align="left">
-  <a href="https://isaaxite.indevs.in">
+  <a href="https://github.com/isaaxite/path-treeify">
     <img alt="GitHub package.json dynamic" src="https://img.shields.io/github/package-json/version/isaaxite/path-treeify?logo=github">
-  </a>
-  <a href="https://www.npmjs.com/package/path-treeify">
-    <img alt="npm version" src="https://img.shields.io/npm/v/path-treeify">
   </a>
   <a href="https://nodejs.org">
     <img alt="node" src="https://img.shields.io/node/v/path-treeify">
@@ -17,14 +14,14 @@
   <a href="https://github.com/isaaxite/path-treeify/blob/main/LICENSE">
     <img alt="license" src="https://img.shields.io/npm/l/path-treeify">
   </a>
-  <a href="https://isaaxite.indevs.in">
+  <a href="https://github.com/isaaxite/path-treeify">
     <img alt="GitHub Created At" src="https://img.shields.io/github/created-at/isaaxite/path-treeify">
   </a>
-  <a href="https://isaaxite.indevs.in">
+  <a href="https://github.com/isaaxite/path-treeify">
     <img alt="GitHub code size in bytes" src="https://img.shields.io/github/languages/code-size/isaaxite/path-treeify">
   </a>
   <a href="https://github.com/isaaxite/path-treeify/commits/main/">
-    <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/w/isaaxite/path-treeify">
+    <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/isaaxite/path-treeify">
   </a>
   <a href="https://github.com/isaaxite/path-treeify/commits/main/">
     <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/isaaxite/path-treeify">
@@ -208,4 +205,4 @@ const tree = treeify.buildByDirPaths(['src']);
 
 ## 许可证
 
-[MIT](./LICENSE) © [isaaxite](https://github.com/isaaxite)
+[MIT](https://github.com/isaaxite/path-treeify/blob/main/LICENSE) © [isaaxite](https://github.com/isaaxite)

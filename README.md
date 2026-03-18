@@ -1,6 +1,6 @@
 # path-treeify
 
-> 📖 [中文文档 (Chinese README)](https://github.com/isaaxite/path-treeify/blob/main/README.zh-CN.md)
+> 📖 [中文文档 (Chinese README)](https://github.com/isaaxite/path-treeify/blob/main/docs/README.zh-CN.md)
 
 <div align="left">
   <!-- <h1>Path-Treeify</h1> -->
@@ -8,11 +8,8 @@
 </div>
 
 <div align="left">
-  <a href="https://isaaxite.indevs.in">
+  <a href="https://github.com/isaaxite/path-treeify">
     <img alt="GitHub package.json dynamic" src="https://img.shields.io/github/package-json/version/isaaxite/path-treeify?logo=github">
-  </a>
-  <a href="https://www.npmjs.com/package/path-treeify">
-    <img alt="npm version" src="https://img.shields.io/npm/v/path-treeify">
   </a>
   <a href="https://nodejs.org">
     <img alt="node" src="https://img.shields.io/node/v/path-treeify">
@@ -20,14 +17,14 @@
   <a href="https://github.com/isaaxite/path-treeify/blob/main/LICENSE">
     <img alt="license" src="https://img.shields.io/npm/l/path-treeify">
   </a>
-  <a href="https://isaaxite.indevs.in">
+  <a href="https://github.com/isaaxite/path-treeify">
     <img alt="GitHub Created At" src="https://img.shields.io/github/created-at/isaaxite/path-treeify">
   </a>
-  <a href="https://isaaxite.indevs.in">
+  <a href="https://github.com/isaaxite/path-treeify">
     <img alt="GitHub code size in bytes" src="https://img.shields.io/github/languages/code-size/isaaxite/path-treeify">
   </a>
   <a href="https://github.com/isaaxite/path-treeify/commits/main/">
-    <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/w/isaaxite/path-treeify">
+    <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/isaaxite/path-treeify">
   </a>
   <a href="https://github.com/isaaxite/path-treeify/commits/main/">
     <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/isaaxite/path-treeify">
@@ -211,4 +208,4 @@ const tree = treeify.buildByDirPaths(['src']);
 
 ## License
 
-[MIT](./LICENSE) © [isaaxite](https://github.com/isaaxite)
+[MIT](https://github.com/isaaxite/path-treeify/blob/main//LICENSE) © [isaaxite](https://github.com/isaaxite)
