@@ -12,7 +12,7 @@
     <img alt="node" src="https://img.shields.io/node/v/path-treeify">
   </a>
   <a href="https://github.com/isaaxite/path-treeify/blob/main/LICENSE">
-    <img alt="license" src="https://img.shields.io/npm/l/path-treeify">
+    <img alt="GitHub License" src="https://img.shields.io/github/license/isaaxite/path-treeify">
   </a>
   <a href="https://github.com/isaaxite/path-treeify">
     <img alt="GitHub Created At" src="https://img.shields.io/github/created-at/isaaxite/path-treeify">
