@@ -33,7 +33,6 @@
     "build:dev": "NODE_ENV=development npm run build",
     "build:prod": "NODE_ENV=production npm run build",
     "build:watch": "nodemon --watch src -e ts --exec \"npm run build:dev\"",
-    "prepublishOnly": "npm run build:prod && npm run check-publish",
     "check-publish": "npm pack --dry-run",
     "publish": "npm publish"
   },
@@ -75,6 +74,7 @@
     "node": ">=18.0.0"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": false
   }
 }
