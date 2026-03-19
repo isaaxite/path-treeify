@@ -121,7 +121,7 @@ export class PathTreeify {
     return children;
   }
 
-  private checkRelatePaths(relativeDirNames: string[]) {
+  private checkRelativePaths(relativeDirNames: string[]) {
     if (!Array.isArray(relativeDirNames)) {
       throw new Error(`Expected array, got ${typeof relativeDirNames}`);
     }
@@ -144,8 +144,8 @@ export class PathTreeify {
     }
   }
 
-  private formatDirnames(nameOfDirs: string[]): string[] {
-    return nameOfDirs.map(dir => {
+  private formatDirnames(dirNames: string[]): string[] {
+    return dirNames.map(dir => {
       // Remove leading and trailing slashes
       return dir.replace(/^\/+|\/+$/g, '');
     }).filter(dir => dir !== ''); // Optional: filter empty strings
@@ -164,12 +164,12 @@ export class PathTreeify {
     return { relative, absolute: resolve(this.base, relative) };
   }
 
-  buildByDirPaths(nameOfDirs: string[]) {
+  buildByDirNames(dirNames: string[]) {
     const root = this.initNode();
-    this.checkRelatePaths(nameOfDirs);
-    const dirNames = this.formatDirnames(nameOfDirs);
+    this.checkRelativePaths(dirNames);
+    const dirNameArr = this.formatDirnames(dirNames);
 
-    for (const dirName of dirNames) {
+    for (const dirName of dirNameArr) {
       const node = this.initNode();
       node.value = dirName;
       node.parent = root;
@@ -178,5 +178,13 @@ export class PathTreeify {
     }
 
     return root;
+  }
+
+  build() {
+    const dirNameArr = readdirSync(this.base).filter(name => {
+      const abs = resolve(this.base, name);
+      return PathValidator.isDirectory(abs);
+    });
+    return this.buildByDirNames(dirNameArr);
   }
 }
