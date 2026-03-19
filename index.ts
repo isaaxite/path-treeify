@@ -1,13 +1,18 @@
 import { accessSync, constants, statSync, readdirSync } from 'fs';
 import { join, sep, resolve } from 'path';
 
+/** A filter function that determines whether a directory should be included in the tree */
 type FilterFunction = (params: { name: string; dirPath: string }) => boolean;
+
+/** Constructor options for PathTreeify */
 interface PathTreeifyProps {
   base: string;
   filter?: FilterFunction;
 }
 
+/** Utility class for validating file system paths */
 class PathValidator {
+  /** Returns true if the path exists and is accessible */
   static isValid(path: string): boolean {
     try {
       accessSync(path, constants.F_OK);
@@ -17,6 +22,7 @@ class PathValidator {
     }
   }
   
+  /** Returns true if the path points to a directory */
   static isDirectory(path: string): boolean {
     try {
       return statSync(path).isDirectory();
@@ -26,16 +32,25 @@ class PathValidator {
   }
 }
 
+/** Represents a single node (directory) in the path tree */
 class PathTreeNode {
+  /** The root base path used to resolve absolute paths */
   private base: string;
+  /** Reference to the parent node; null for the root node */
   public parent: PathTreeNode | null = null;
+  /** The directory name of this node (not a full path) */
   public value: string = '';
+  /** Child nodes representing subdirectories */
   public children: PathTreeNode[] = [];
 
   constructor(base: string) {
     this.base = base;
   }
 
+  /**
+   * Walks up the parent chain to compute this node's relative and absolute paths.
+   * @returns An object containing the relative path from base and the absolute path
+   */
   getPath(): { relative: string; absolute: string } {
     let relative = '';
     let current: PathTreeNode = this;
@@ -50,8 +65,11 @@ class PathTreeNode {
   }
 }
 
+/** Builds a tree of directory nodes rooted at a given base path */
 export class PathTreeify {
+  /** The root directory to scan */
   private base: string;
+  /** Optional filter applied to each directory during traversal */
   private filter?: FilterFunction;
 
   constructor({ filter, base }: Partial<PathTreeifyProps>) {
@@ -71,6 +89,10 @@ export class PathTreeify {
     this.base = base;
   }
 
+  /**
+   * Validates that the provided filter is a function, accepts one parameter,
+   * and returns a boolean. Throws a TypeError if any condition is violated.
+   */
   private validateFilter(filter: any): asserts filter is FilterFunction {
     if (typeof filter !== 'function') {
       throw new TypeError('filter must be a function');
@@ -90,6 +112,10 @@ export class PathTreeify {
     }
   }
 
+  /**
+   * Creates and optionally attaches a new PathTreeNode to a parent.
+   * @param parent - The parent node to attach to, or null for the root
+   */
   private initNode(parent: PathTreeNode | null = null): PathTreeNode {
     const node = new PathTreeNode(this.base);
     if (parent) {
@@ -98,6 +124,12 @@ export class PathTreeify {
     return node;
   }
 
+  /**
+   * Recursively reads a directory and builds child nodes for each subdirectory.
+   * Applies the instance-level filter if one is set.
+   * @param dirPath - Absolute path of the directory to read
+   * @param parent - The parent node to attach children to
+   */
   private buildChildren(dirPath: string, parent: PathTreeNode) {
     const names = readdirSync(dirPath);
     const children: Array<PathTreeNode> = [];
@@ -121,6 +153,11 @@ export class PathTreeify {
     return children;
   }
 
+  /**
+   * Validates that each entry in the array is a string pointing to
+   * an accessible directory relative to the base path.
+   * @param relativeDirNames - Array of relative directory path strings to validate
+   */
   private checkRelativePaths(relativeDirNames: string[]) {
     if (!Array.isArray(relativeDirNames)) {
       throw new Error(`Expected array, got ${typeof relativeDirNames}`);
@@ -144,6 +181,10 @@ export class PathTreeify {
     }
   }
 
+  /**
+   * Strips leading and trailing slashes from each directory name
+   * and removes any resulting empty strings.
+   */
   private formatDirnames(dirNames: string[]): string[] {
     return dirNames.map(dir => {
       // Remove leading and trailing slashes
@@ -151,6 +192,7 @@ export class PathTreeify {
     }).filter(dir => dir !== ''); // Optional: filter empty strings
   }
 
+  /** Returns the names of all immediate subdirectories under the base path */
   private getAllDirNamesUnderBase() {
     return readdirSync(this.base).filter(name => {
       const abs = resolve(this.base, name);
@@ -158,6 +200,10 @@ export class PathTreeify {
     });
   }
 
+  /**
+   * Builds a tree rooted at base, containing only the specified subdirectories.
+   * @param dirNames - Relative directory names to include as top-level nodes
+   */
   private buildByDirNames(dirNames: string[]) {
     const root = this.initNode();
     this.checkRelativePaths(dirNames);
@@ -174,11 +220,19 @@ export class PathTreeify {
     return root;
   }
 
+  /**
+   * Builds a tree using only the subdirectories under base that pass the given filter.
+   * @param filter - A predicate applied to each top-level directory name
+   */
   private buildByFilter(filter: (dirName: string) => boolean): PathTreeNode {
-    const allDirNames = this.getAllDirNamesUnderBase(); // 获取 base 下所有目录名
+    const allDirNames = this.getAllDirNamesUnderBase();
     return this.buildByDirNames(allDirNames.filter(filter));
   }
 
+  /**
+   * Computes the relative and absolute paths for a given node
+   * by walking up the parent chain.
+   */
   getPathBy(node: PathTreeNode): { relative: string; absolute: string } {
     let relative = '';
     let current = node;
@@ -192,8 +246,14 @@ export class PathTreeify {
     return { relative, absolute: resolve(this.base, relative) };
   }
 
+  /** Overload: build the tree from an explicit list of relative directory names */
   buildBy(dirNames: string[]): PathTreeNode;
+  /** Overload: build the tree from a predicate applied to top-level directory names */
   buildBy(filter: (dirName: string) => boolean): PathTreeNode;
+  /**
+   * Builds a subtree based on either an array of directory names or a filter function.
+   * Throws if the argument is neither.
+   */
   buildBy(argv: any): PathTreeNode {
     if (Array.isArray(argv)) {
       return this.buildByDirNames(argv);
@@ -208,6 +268,7 @@ export class PathTreeify {
     );
   }
 
+  /** Builds a full tree from all immediate subdirectories under the base path */
   build() {
     const dirNameArr = this.getAllDirNamesUnderBase();
     return this.buildByDirNames(dirNameArr);
