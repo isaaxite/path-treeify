@@ -21,10 +21,7 @@
   "files": [
     "dist/index.cjs",
     "dist/index.mjs",
-    "dist/**/*.d.ts",
-    "README.md",
-    "!README.zh-CN.md",
-    "LICENSE"
+    "dist/**/*.d.ts"
   ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -32,7 +29,7 @@
     "build": "npm run clean && rollup -c",
     "build:dev": "NODE_ENV=development npm run build",
     "build:prod": "NODE_ENV=production npm run build",
-    "build:watch": "nodemon --watch src -e ts --exec \"npm run build:dev\"",
+    "build:watch": "nodemon --watch index.ts -e ts --exec \"npm run build:dev\"",
     "check-publish": "npm pack --dry-run",
     "publish:beta": "npm publish --tag beta --access public",
     "publish:latest": "npm publish --tag latest --access public"
