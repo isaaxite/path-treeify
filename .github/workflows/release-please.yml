@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write  # 添加这个，因为标签操作需要 issues 权限
 
 jobs:
   release-please:
