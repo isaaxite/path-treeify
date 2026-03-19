@@ -7,12 +7,6 @@ interface PathTreeifyProps {
   filter?: FilterFunction;
 }
 
-interface PathTreeNode {
-  parent: PathTreeNode | null;
-  value: string;
-  children: PathTreeNode[];
-}
-
 class PathValidator {
   static isValid(path: string): boolean {
     try {
@@ -29,6 +23,30 @@ class PathValidator {
     } catch {
       return false;
     }
+  }
+}
+
+class PathTreeNode {
+  private base: string;
+  public parent: PathTreeNode | null = null;
+  public value: string = '';
+  public children: PathTreeNode[] = [];
+
+  constructor(base: string) {
+    this.base = base;
+  }
+
+  getPath(): { relative: string; absolute: string } {
+    let relative = '';
+    let current: PathTreeNode = this;
+    while (current.parent) {
+      relative = relative
+        ? `${current.value}${sep}${relative}`
+        : current.value;
+      current = current.parent;
+    }
+    
+    return { relative, absolute: resolve(this.base, relative) };
   }
 }
 
@@ -73,7 +91,11 @@ export class PathTreeify {
   }
 
   private initNode(parent: PathTreeNode | null = null): PathTreeNode {
-    return { parent, value: '', children: [] };
+    const node = new PathTreeNode(this.base);
+    if (parent) {
+      node.parent = parent;
+    }
+    return node;
   }
 
   private buildChildren(dirPath: string, parent: PathTreeNode) {
@@ -124,9 +146,9 @@ export class PathTreeify {
 
   private formatDirnames(nameOfDirs: string[]): string[] {
     return nameOfDirs.map(dir => {
-      // 移除开头的 / 和结尾的 /
+      // Remove leading and trailing slashes
       return dir.replace(/^\/+|\/+$/g, '');
-    }).filter(dir => dir !== ''); // 可选：过滤掉空字符串
+    }).filter(dir => dir !== ''); // Optional: filter empty strings
   }
 
   getPathBy(node: PathTreeNode): { relative: string; absolute: string } {
