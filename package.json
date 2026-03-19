@@ -34,7 +34,8 @@
     "build:prod": "NODE_ENV=production npm run build",
     "build:watch": "nodemon --watch src -e ts --exec \"npm run build:dev\"",
     "check-publish": "npm pack --dry-run",
-    "publish": "npm publish"
+    "publish:beta": "npm publish --tag beta --access public",
+    "publish:latest": "npm publish --tag latest --access public"
   },
   "repository": {
     "type": "git",
