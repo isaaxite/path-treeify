@@ -151,20 +151,14 @@ export class PathTreeify {
     }).filter(dir => dir !== ''); // Optional: filter empty strings
   }
 
-  getPathBy(node: PathTreeNode): { relative: string; absolute: string } {
-    let relative = '';
-    let current = node;
-    while (current.parent) {
-      relative = relative
-        ? `${current.value}${sep}${relative}`
-        : current.value;
-      current = current.parent;
-    }
-    
-    return { relative, absolute: resolve(this.base, relative) };
+  private getAllDirNamesUnderBase() {
+    return readdirSync(this.base).filter(name => {
+      const abs = resolve(this.base, name);
+      return PathValidator.isDirectory(abs);
+    });
   }
 
-  buildByDirNames(dirNames: string[]) {
+  private buildByDirNames(dirNames: string[]) {
     const root = this.initNode();
     this.checkRelativePaths(dirNames);
     const dirNameArr = this.formatDirnames(dirNames);
@@ -180,11 +174,42 @@ export class PathTreeify {
     return root;
   }
 
+  private buildByFilter(filter: (dirName: string) => boolean): PathTreeNode {
+    const allDirNames = this.getAllDirNamesUnderBase(); // 获取 base 下所有目录名
+    return this.buildByDirNames(allDirNames.filter(filter));
+  }
+
+  getPathBy(node: PathTreeNode): { relative: string; absolute: string } {
+    let relative = '';
+    let current = node;
+    while (current.parent) {
+      relative = relative
+        ? `${current.value}${sep}${relative}`
+        : current.value;
+      current = current.parent;
+    }
+    
+    return { relative, absolute: resolve(this.base, relative) };
+  }
+
+  buildBy(dirNames: string[]): PathTreeNode;
+  buildBy(filter: (dirName: string) => boolean): PathTreeNode;
+  buildBy(argv: any): PathTreeNode {
+    if (Array.isArray(argv)) {
+      return this.buildByDirNames(argv);
+    }
+
+    if (typeof argv === 'function') {
+      return this.buildByFilter(argv);
+    }
+
+    throw new TypeError(
+      `buildBy: expected an array of strings or a filter function, but received ${typeof argv}`
+    );
+  }
+
   build() {
-    const dirNameArr = readdirSync(this.base).filter(name => {
-      const abs = resolve(this.base, name);
-      return PathValidator.isDirectory(abs);
-    });
+    const dirNameArr = this.getAllDirNamesUnderBase();
     return this.buildByDirNames(dirNameArr);
   }
 }
