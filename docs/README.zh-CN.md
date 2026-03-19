@@ -34,7 +34,9 @@
 
 - 🌲 从一个或多个目录路径构建递归树结构
 - 🔗 每个节点携带 `parent` 循环引用，支持向上遍历
+- 📍 每个节点自带 `getPath()` 方法，可直接获取自身路径
 - 🔍 可选 `filter` 回调，用于在扫描时包含/排除目录
+- ⚡ `build()` 方法无需传参，自动扫描整个 `base` 目录
 - 📦 同时提供 ESM（`index.mjs`）与 CJS（`index.cjs`），附带完整 TypeScript 类型声明
 - 🚫 零运行时依赖
 
@@ -65,18 +67,11 @@ import { PathTreeify } from 'path-treeify';
 
 const treeify = new PathTreeify({ base: '/your/project/root' });
 
-// 扫描指定的目录
-const tree = treeify.buildByDirPaths(['src', 'tests']);
+// 扫描指定目录
+const tree = treeify.buildByDirNames(['src', 'tests']);
 
-console.log(tree);
-// {
-//   parent: null,
-//   value: '',
-//   children: [
-//     { parent: [Circular], value: 'src',   children: [...] },
-//     { parent: [Circular], value: 'tests', children: [...] }
-//   ]
-// }
+// 或者一键扫描 base 下所有子目录
+const fullTree = treeify.build();
 ```
 
 ---
@@ -118,15 +113,25 @@ const treeify = new PathTreeify({
 
 ---
 
-### `buildByDirPaths(paths: string[]): PathTreeNode`
+### `build(): PathTreeNode`
 
-扫描给定的相对目录路径（以 `base` 为基准解析），返回一个合成根节点 `PathTreeNode`，其 `children` 即为你请求的顶层节点。
+扫描 `base` 下**所有**一级子目录，返回一个合成根节点 `PathTreeNode`。这是 `buildByDirNames` 的零配置替代方案。
 
 ```ts
-const root = treeify.buildByDirPaths(['src', 'docs']);
+const tree = treeify.build();
 ```
 
-- `paths` 中的每一项都必须是相对于 `base` 的有效可访问目录。
+---
+
+### `buildByDirNames(dirNames: string[]): PathTreeNode`
+
+扫描给定的相对目录名（以 `base` 为基准解析），返回一个合成根节点 `PathTreeNode`，其 `children` 即为你请求的顶层节点。
+
+```ts
+const root = treeify.buildByDirNames(['src', 'docs']);
+```
+
+- `dirNames` 中的每一项都必须是相对于 `base` 的有效可访问目录。
 - 前后多余的斜杠会被自动去除。
 - 若任意路径不存在或不是目录，则抛出错误。
 
@@ -134,7 +139,7 @@ const root = treeify.buildByDirPaths(['src', 'docs']);
 
 ### `getPathBy(node: PathTreeNode): { relative: string; absolute: string }`
 
-沿节点的 `parent` 链向上还原完整路径。
+沿节点的 `parent` 链向上还原完整路径，与直接调用 `node.getPath()` 等价。
 
 ```ts
 const srcNode = root.children[0];
@@ -147,13 +152,19 @@ const { relative, absolute } = treeify.getPathBy(srcNode);
 
 ### `PathTreeNode`
 
+`PathTreeNode` 现在是一个**类**，自带 `getPath()` 方法，无需将节点传回 `PathTreeify` 实例即可获取路径。
+
 ```ts
-interface PathTreeNode {
+class PathTreeNode {
   parent:   PathTreeNode | null; // 仅合成根节点为 null
   value:    string;              // 当前节点的目录名
   children: PathTreeNode[];
+
+  getPath(): { relative: string; absolute: string };
 }
 ```
+
+**`node.getPath()`** 与 `treeify.getPathBy(node)` 返回完全相同的结果，两者均可使用。
 
 > ⚠️ **循环引用** — `parent` 指向树的上层节点。若需要序列化结果，请使用 `JSON.stringify` 的替换函数，或借助 `flatted` 等库处理循环引用。
 
@@ -161,35 +172,37 @@ interface PathTreeNode {
 
 ## 示例
 
-### 扫描整个目录
+### 扫描整个 base 目录
 
 ```ts
 import { PathTreeify } from 'path-treeify';
-import { readdirSync } from 'fs';
 
-const base = '/your/project';
-const treeify = new PathTreeify({ base });
+const treeify = new PathTreeify({
+  base: '/your/project',
+  filter: ({ name }) => name !== 'node_modules' && !name.startsWith('.'),
+});
 
-// 获取所有顶级目录
-const topLevel = readdirSync(base, { withFileTypes: true })
-  .filter(d => d.isDirectory())
-  .map(d => d.name);
-
-const tree = treeify.buildByDirPaths(topLevel);
+const tree = treeify.build();
 ```
 
-### 遍历时获取绝对路径
+### 扫描指定目录
 
 ```ts
-function printPaths(node, treeify) {
+const tree = treeify.buildByDirNames(['src', 'tests', 'docs']);
+```
+
+### 通过 `node.getPath()` 获取路径
+
+```ts
+function printPaths(node) {
   for (const child of node.children) {
-    const { absolute } = treeify.getPathBy(child);
+    const { absolute } = child.getPath();
     console.log(absolute);
-    printPaths(child, treeify);
+    printPaths(child);
   }
 }
 
-printPaths(tree, treeify);
+printPaths(tree);
 ```
 
 ### CommonJS 用法
@@ -198,7 +211,7 @@ printPaths(tree, treeify);
 const { PathTreeify } = require('path-treeify');
 
 const treeify = new PathTreeify({ base: __dirname });
-const tree = treeify.buildByDirPaths(['src']);
+const tree = treeify.build();
 ```
 
 ---

@@ -37,7 +37,9 @@
 
 - 🌲 Builds a recursive tree from one or more directory paths
 - 🔗 Each node carries a `parent` circular reference for upward traversal
+- 📍 Each node exposes a `getPath()` method to retrieve its own paths directly
 - 🔍 Optional `filter` callback to include/exclude directories during scanning
+- ⚡ `build()` method scans the entire `base` directory with zero configuration
 - 📦 Ships as both ESM (`index.mjs`) and CJS (`index.cjs`) with full TypeScript types
 - 🚫 Zero runtime dependencies
 
@@ -68,18 +70,11 @@ import { PathTreeify } from 'path-treeify';
 
 const treeify = new PathTreeify({ base: '/your/project/root' });
 
-// Scan the whole base directory
-const tree = treeify.buildByDirPaths(['src', 'tests']);
+// Scan specific directories
+const tree = treeify.buildByDirNames(['src', 'tests']);
 
-console.log(tree);
-// {
-//   parent: null,
-//   value: '',
-//   children: [
-//     { parent: [Circular], value: 'src',   children: [...] },
-//     { parent: [Circular], value: 'tests', children: [...] }
-//   ]
-// }
+// Or scan everything under base at once
+const fullTree = treeify.build();
 ```
 
 ---
@@ -90,10 +85,10 @@ console.log(tree);
 
 Creates a new instance.
 
-| Option   | Type                          | Required | Description                                       |
-|----------|-------------------------------|----------|---------------------------------------------------|
-| `base`   | `string`                      | ✅        | Absolute path to the root directory to scan from |
-| `filter` | `FilterFunction` (see below)  | ❌        | Called for every directory found during traversal |
+| Option   | Type                          | Required | Description                                        |
+|----------|-------------------------------|----------|----------------------------------------------------|
+| `base`   | `string`                      | ✅        | Absolute path to the root directory to scan from  |
+| `filter` | `FilterFunction` (see below)  | ❌        | Called for every directory found during traversal  |
 
 `base` must exist and be a directory, otherwise the constructor throws.
 
@@ -121,15 +116,25 @@ const treeify = new PathTreeify({
 
 ---
 
-### `buildByDirPaths(paths: string[]): PathTreeNode`
+### `build(): PathTreeNode`
 
-Scans the given relative directory paths (resolved against `base`) and returns a synthetic root `PathTreeNode` whose `children` are the top-level nodes you requested.
+Scans **all** subdirectories directly under `base` and returns a synthetic root `PathTreeNode`. This is the zero-configuration alternative to `buildByDirNames`.
 
 ```ts
-const root = treeify.buildByDirPaths(['src', 'docs']);
+const tree = treeify.build();
 ```
 
-- Each element of `paths` must be a valid, accessible directory relative to `base`.
+---
+
+### `buildByDirNames(dirNames: string[]): PathTreeNode`
+
+Scans the given relative directory names (resolved against `base`) and returns a synthetic root `PathTreeNode` whose `children` are the top-level nodes you requested.
+
+```ts
+const root = treeify.buildByDirNames(['src', 'docs']);
+```
+
+- Each element must be a valid, accessible directory relative to `base`.
 - Leading and trailing slashes are stripped automatically.
 - Throws if any path does not exist or is not a directory.
 
@@ -137,7 +142,7 @@ const root = treeify.buildByDirPaths(['src', 'docs']);
 
 ### `getPathBy(node: PathTreeNode): { relative: string; absolute: string }`
 
-Walks a node's `parent` chain to reconstruct its full path.
+Walks a node's `parent` chain to reconstruct its full path. Equivalent to calling `node.getPath()` directly.
 
 ```ts
 const srcNode = root.children[0];
@@ -150,13 +155,19 @@ const { relative, absolute } = treeify.getPathBy(srcNode);
 
 ### `PathTreeNode`
 
+`PathTreeNode` is now a **class** with its own `getPath()` method, so you can retrieve a node's path without passing it back to the `PathTreeify` instance.
+
 ```ts
-interface PathTreeNode {
+class PathTreeNode {
   parent:   PathTreeNode | null; // null only on the synthetic root
   value:    string;              // directory name for this node
   children: PathTreeNode[];
+
+  getPath(): { relative: string; absolute: string };
 }
 ```
+
+**`node.getPath()`** returns the same result as `treeify.getPathBy(node)` — both are available for convenience.
 
 > ⚠️ **Circular references** — `parent` points back up the tree. Use `JSON.stringify` replacers or a library like `flatted` if you need to serialize the result.
 
@@ -164,35 +175,37 @@ interface PathTreeNode {
 
 ## Examples
 
-### Scan an entire directory
+### Scan an entire base directory
 
 ```ts
 import { PathTreeify } from 'path-treeify';
-import { readdirSync } from 'fs';
 
-const base = '/your/project';
-const treeify = new PathTreeify({ base });
+const treeify = new PathTreeify({
+  base: '/your/project',
+  filter: ({ name }) => name !== 'node_modules' && !name.startsWith('.'),
+});
 
-// Collect all top-level directories
-const topLevel = readdirSync(base, { withFileTypes: true })
-  .filter(d => d.isDirectory())
-  .map(d => d.name);
-
-const tree = treeify.buildByDirPaths(topLevel);
+const tree = treeify.build();
 ```
 
-### Retrieve absolute paths while walking
+### Scan specific directories
 
 ```ts
-function printPaths(node, treeify) {
+const tree = treeify.buildByDirNames(['src', 'tests', 'docs']);
+```
+
+### Retrieve paths via `node.getPath()`
+
+```ts
+function printPaths(node) {
   for (const child of node.children) {
-    const { absolute } = treeify.getPathBy(child);
+    const { absolute } = child.getPath();
     console.log(absolute);
-    printPaths(child, treeify);
+    printPaths(child);
   }
 }
 
-printPaths(tree, treeify);
+printPaths(tree);
 ```
 
 ### CommonJS usage
@@ -201,11 +214,11 @@ printPaths(tree, treeify);
 const { PathTreeify } = require('path-treeify');
 
 const treeify = new PathTreeify({ base: __dirname });
-const tree = treeify.buildByDirPaths(['src']);
+const tree = treeify.build();
 ```
 
 ---
 
 ## License
 
-[MIT](https://github.com/isaaxite/path-treeify/blob/main//LICENSE) © [isaaxite](https://github.com/isaaxite)
+[MIT](https://github.com/isaaxite/path-treeify/blob/main/LICENSE) © [isaaxite](https://github.com/isaaxite)
