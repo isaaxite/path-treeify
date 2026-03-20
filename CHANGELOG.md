@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/isaaxite/path-treeify/compare/v1.1.0...v1.2.0) (2026-03-19)
+
+
+### Features
+
+* add buildBy dirNames or filter ([d08d633](https://github.com/isaaxite/path-treeify/commit/d08d6335a5be871176d73072d9c6be9ce745e4d0))
+
 ## [1.1.0](https://github.com/isaaxite/path-treeify/compare/v1.0.0...v1.1.0) (2026-03-19)
 
 
