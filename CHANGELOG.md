@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0](https://github.com/isaaxite/path-treeify/compare/v1.2.0...v1.3.0) (2026-03-21)
+
+
+### Features
+
+* **buildBy:** handle DirName with leading slash ([1d0f233](https://github.com/isaaxite/path-treeify/commit/1d0f23373a3fae9f7563ccb47adbd9bd19764521))
+
+
+### Bug Fixes
+
+* constructor filter not applied when traversing root directory ([db6fe0b](https://github.com/isaaxite/path-treeify/commit/db6fe0bcb0cf8f855ca659d402393ee00a355306))
+
 ## [1.2.0](https://github.com/isaaxite/path-treeify/compare/v1.1.0...v1.2.0) (2026-03-19)
 
 
