@@ -38,9 +38,9 @@
 - 🌲 Builds a recursive tree from one or more directory paths
 - 🔗 Each node carries a `parent` circular reference for upward traversal
 - 📍 Each node exposes a `getPath()` method to retrieve its own paths directly
-- 🔍 Optional `filter` callback to include/exclude directories during scanning
+- 🔍 Optional `filter` callback applied at **every depth**, including top-level directories
 - ⚡ `build()` scans the entire `base` directory with zero configuration
-- 🎛️ `buildBy()` accepts either a directory name array or a filter function
+- 🎛️ `buildBy()` accepts either a directory name array or a top-level filter function
 - 📦 Ships as both ESM (`index.mjs`) and CJS (`index.cjs`) with full TypeScript types
 - 🚫 Zero runtime dependencies
 
@@ -74,8 +74,8 @@ const treeify = new PathTreeify({ base: '/your/project/root' });
 // Scan specific directories by name
 const tree = treeify.buildBy(['src', 'tests']);
 
-// Scan with a filter function over all top-level directories
-const filtered = treeify.buildBy(name => !name.startsWith('.') && name !== 'node_modules');
+// Scan with a top-level filter function
+const filtered = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith('.'));
 
 // Or scan everything under base at once
 const fullTree = treeify.build();
@@ -89,10 +89,10 @@ const fullTree = treeify.build();
 
 Creates a new instance.
 
-| Option   | Type                          | Required | Description                                        |
-|----------|-------------------------------|----------|----------------------------------------------------|
-| `base`   | `string`                      | ✅        | Absolute path to the root directory to scan from  |
-| `filter` | `FilterFunction` (see below)  | ❌        | Called for every directory found during deep traversal |
+| Option   | Type                          | Required | Description                                                                 |
+|----------|-------------------------------|----------|-----------------------------------------------------------------------------|
+| `base`   | `string`                      | ✅        | Absolute path to the root directory to scan from                           |
+| `filter` | `FilterFunction` (see below)  | ❌        | Applied at **every depth** — top-level directories included                |
 
 `base` must exist and be a directory, otherwise the constructor throws.
 
@@ -100,7 +100,7 @@ Creates a new instance.
 
 ### `FilterFunction`
 
-Used as the `filter` option in the constructor. Applied recursively during deep traversal of the tree.
+Used as the `filter` option in the constructor. Applied at every level of the tree, including the immediate children of `base`.
 
 ```ts
 type FilterFunction = (params: {
@@ -109,14 +109,14 @@ type FilterFunction = (params: {
 }) => boolean;
 ```
 
-Return `true` to **include** the directory and recurse into it; `false` to **skip** it.
+Return `true` to **include** the directory and recurse into it; `false` to **skip** it entirely.
 
-**Example — skip hidden directories and `node_modules` at every level:**
+**Example — exclude `node_modules` and hidden directories at every depth:**
 
 ```ts
 const treeify = new PathTreeify({
   base: '/your/project',
-  filter: ({ name }) => !name.startsWith('.') && name !== 'node_modules',
+  filter: ({ name }) => name !== 'node_modules' && !name.startsWith('.'),
 });
 ```
 
@@ -124,7 +124,7 @@ const treeify = new PathTreeify({
 
 ### `build(): PathTreeNode`
 
-Scans **all** subdirectories directly under `base` and returns a synthetic root `PathTreeNode`. This is the zero-configuration shorthand.
+Scans all subdirectories directly under `base` (applying the instance-level `filter` if set) and returns a synthetic root `PathTreeNode`.
 
 ```ts
 const tree = treeify.build();
@@ -145,13 +145,13 @@ const tree = treeify.buildBy(['src', 'docs', 'tests']);
 
 ### `buildBy(filter: (dirName: string) => boolean): PathTreeNode`
 
-Collects all top-level subdirectories under `base`, applies the given filter function, then builds a tree from the matching names.
+Collects all top-level subdirectories under `base`, applies the given predicate to select which ones to include, then builds a tree from the matching names. The instance-level `filter` still applies during deep traversal.
 
 ```ts
 const tree = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith('.'));
 ```
 
-> Note: this `filter` operates only on the **top-level** directory names under `base`. For filtering at every depth, pass a `filter` to the constructor instead.
+> **Note:** the predicate passed to `buildBy(fn)` only selects which **top-level** directories to include. To filter directories at every depth, pass a `filter` to the constructor.
 
 ---
 
@@ -161,6 +161,8 @@ Walks a node's `parent` chain to reconstruct its full path. Equivalent to callin
 
 ```ts
 const { relative, absolute } = treeify.getPathBy(node);
+// relative → e.g. 'src/components'
+// absolute → e.g. '/your/project/src/components'
 ```
 
 ---
@@ -179,7 +181,7 @@ class PathTreeNode {
 }
 ```
 
-**`node.getPath()`** returns the same result as `treeify.getPathBy(node)` — both are available for convenience.
+`node.getPath()` returns the same result as `treeify.getPathBy(node)` — both are available for convenience.
 
 > ⚠️ **Circular references** — `parent` points back up the tree. Use `JSON.stringify` replacers or a library like `flatted` if you need to serialize the result.
 
@@ -196,19 +198,7 @@ const treeify = new PathTreeify({ base: '/your/project' });
 const tree = treeify.build();
 ```
 
-### Scan specific directories
-
-```ts
-const tree = treeify.buildBy(['src', 'tests', 'docs']);
-```
-
-### Filter top-level directories
-
-```ts
-const tree = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith('.'));
-```
-
-### Filter at every depth via constructor
+### Exclude directories at every depth via constructor filter
 
 ```ts
 const treeify = new PathTreeify({
@@ -216,6 +206,18 @@ const treeify = new PathTreeify({
   filter: ({ name }) => name !== 'node_modules' && !name.startsWith('.'),
 });
 const tree = treeify.build();
+```
+
+### Scan specific directories
+
+```ts
+const tree = treeify.buildBy(['src', 'tests', 'docs']);
+```
+
+### Select top-level directories with a predicate
+
+```ts
+const tree = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith('.'));
 ```
 
 ### Retrieve paths via `node.getPath()`
