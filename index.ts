@@ -196,7 +196,16 @@ export class PathTreeify {
   private getAllDirNamesUnderBase() {
     return readdirSync(this.base).filter(name => {
       const abs = resolve(this.base, name);
-      return PathValidator.isDirectory(abs);
+
+      if (!PathValidator.isDirectory(abs)) {
+        return false;
+      }
+
+      if (this.filter && !this.filter({ name, dirPath: this.base })) {
+        return false;
+      }
+    
+      return true;
     });
   }
 
