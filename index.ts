@@ -215,8 +215,8 @@ export class PathTreeify {
    */
   private buildByDirNames(dirNames: string[]) {
     const root = this.initNode();
-    this.checkRelativePaths(dirNames);
     const dirNameArr = this.formatDirnames(dirNames);
+    this.checkRelativePaths(dirNameArr);
 
     for (const dirName of dirNameArr) {
       const node = this.initNode();
