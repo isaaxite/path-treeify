@@ -1,6 +1,6 @@
 {
   "name": "path-treeify",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Convert a path or an array of paths into a tree-structured JavaScript object, where each node has a `parent` property that holds a circular reference to its parent node.",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -36,8 +36,12 @@
     "publish:latest": "npm publish --tag latest --access public"
   },
   "ava": {
-    "files": ["tests/**/*.mjs"],
-    "nodeArguments": ["--experimental-vm-modules"]
+    "files": [
+      "tests/**/*.mjs"
+    ],
+    "nodeArguments": [
+      "--experimental-vm-modules"
+    ]
   },
   "repository": {
     "type": "git",
