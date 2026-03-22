@@ -23,6 +23,19 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: node
 
+      - name: Trigger Build Workflow
+        if: steps.release.outputs.pr != ''
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            /repos/isaaxite/path-treeify/actions/workflows/unittests.yml/dispatches \
+            -f ref=main \
+            -f inputs[commit_sha]="${{ github.sha }}"
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }} 
+
   # -------------------------------------------------------
   # fix/feat 等有效变更 push 时，发布 beta 版本到 npm
   # 判断依据：release-please 维护着一个待合并的 Release PR（pr 有值）
@@ -68,11 +81,6 @@ jobs:
 
       - name: Bump version to beta (in-memory, not committed)
         run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
-
-      - name: Publish beta to npm
-        run: npm run publish:beta
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # -------------------------------------------------------
   # Release PR 合并后，发布正式 latest 版本到 npm

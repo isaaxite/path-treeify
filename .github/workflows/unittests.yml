@@ -1,0 +1,73 @@
+name: Test CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: 'Commit SHA to report coverage for'
+        required: false
+
+jobs:
+   converage-unitests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Cache dependencies
+        id: cache-dependencies
+        uses: actions/cache@v5
+        with:
+          path: ./node_modules
+          key: dependencies-${{ runner.os }}-node-${{ hashFiles('./pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        if: steps.cache-dependencies.outputs.cache-hit != 'true'
+        run: npm install -g pnpm && pnpm i --frozen-lockfile
+
+      - name: Build
+        run: npm run build:dev
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Run tests with junit
+        run: npm run test:junit
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          report_type: coverage
+          flags: unittests
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          disable_search: true
+          files: ./reports/coverage/lcov.info
+          verbose: true
+          override_commit: ${{ inputs.commit_sha || github.sha }}
+          override_branch: ${{ github.ref_name }}
+
+      - name: Upload to Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: ./reports/coverage/lcov.info
+
+      - name: Upload test result to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          report_type: test_results
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          disable_search: true
+          files: ./reports/junit.xml
+          verbose: true
+          override_commit: ${{ inputs.commit_sha || github.sha }}
+          override_branch: ${{ github.ref_name }}

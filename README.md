@@ -28,6 +28,10 @@
   </a>
   <a href="https://github.com/isaaxite/path-treeify/commits/main/">
     <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/isaaxite/path-treeify">
+    <a href='https://codecov.io/github/isaaxite/path-treeify/tests'>
+      <img src='https://github.com/isaaxite/path-treeify/actions/workflows/converage-unitests.yml/badge.svg' alt='Coverage Status' />
+    </a>
+    <a href='https://coveralls.io/github/isaaxite/path-treeify'><img src='https://coveralls.io/repos/github/isaaxite/path-treeify/badge.svg' alt='Coverage Status' /></a>
   </a>
 </div>
 
