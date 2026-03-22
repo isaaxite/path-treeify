@@ -81,6 +81,11 @@ jobs:
 
       - name: Bump version to beta (in-memory, not committed)
         run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
+    
+      - name: Publish beta to npm
+        run: npm run publish:beta
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # -------------------------------------------------------
   # Release PR 合并后，发布正式 latest 版本到 npm
