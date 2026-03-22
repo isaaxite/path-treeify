@@ -25,8 +25,10 @@
   ],
   "scripts": {
     "test": "ava",
-    "test:watch": "ava --watch",
-    "clean": "rimraf ./dist",
+    "test:coverage": "c8 ava",
+    "test:junit": "mkdir -p reports && ava --tap | tap-xunit > reports/junit.xml",
+    "test:report": "rimraf reports && npm run test:coverage && npm run test:junit",
+    "clean": "rimraf dist",
     "build": "npm run clean && rollup -c",
     "build:dev": "NODE_ENV=development npm run build",
     "build:prod": "NODE_ENV=production npm run build",
@@ -36,8 +38,27 @@
     "publish:latest": "npm publish --tag latest --access public"
   },
   "ava": {
-    "files": ["tests/**/*.mjs"],
-    "nodeArguments": ["--experimental-vm-modules"]
+    "files": [
+      "tests/**/*.mjs"
+    ],
+    "nodeArguments": [
+      "--experimental-vm-modules"
+    ]
+  },
+  "c8": {
+    "reports-dir": "reports/coverage",
+    "reporter": [
+      "html",
+      "lcov"
+    ],
+    "exclude": [
+      "tests/**",
+      "node_modules/**"
+    ],
+    "lines": 80,
+    "statements": 80,
+    "functions": 80,
+    "branches": 75
   },
   "repository": {
     "type": "git",
@@ -68,9 +89,11 @@
     "@rollup/plugin-typescript": "^12.3.0",
     "@types/node": "^25.5.0",
     "ava": "^7.0.0",
+    "c8": "^11.0.0",
     "nodemon": "^3.1.14",
     "rimraf": "^6.1.3",
     "rollup": "^4.59.0",
+    "tap-xunit": "^2.4.1",
     "tslib": "^2.8.1",
     "typescript": "^5.9.3"
   },
