@@ -1,4 +1,7 @@
-# path-treeify
+<div align="center">
+  <img alt="LOGO" src="https://assets-amu.pages.dev/path-treeify/logo.png">
+</div>
+<br/>
 
 > 📖 [English README](https://github.com/isaaxite/path-treeify/blob/main/README.md)
 
