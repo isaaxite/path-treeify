@@ -1,13 +1,17 @@
 import { accessSync, constants, statSync, readdirSync } from 'fs';
-import { join, sep, resolve } from 'path';
+import { join, sep, resolve, dirname } from 'path';
 
-/** A filter function that determines whether a directory should be included in the tree */
+/** A filter function that determines whether an entry should be included in the tree */
 type FilterFunction = (params: { name: string; dirPath: string }) => boolean;
 
 /** Constructor options for PathTreeify */
 interface PathTreeifyProps {
+  /** The root directory to scan */
   base: string;
+  /** Optional filter applied to every entry during recursive traversal */
   filter?: FilterFunction;
+  /** When true, files are included as leaf nodes alongside directories. Defaults to false */
+  fileVisible?: boolean;
 }
 
 /** Utility class for validating file system paths */
@@ -21,7 +25,7 @@ class PathValidator {
       return false;
     }
   }
-  
+
   /** Returns true if the path points to a directory */
   static isDirectory(path: string): boolean {
     try {
@@ -30,28 +34,41 @@ class PathValidator {
       return false;
     }
   }
+
+  /** Returns true if the path points to a regular file */
+  static isFile(path: string): boolean {
+    try {
+      return statSync(path).isFile();
+    } catch {
+      return false;
+    }
+  }
 }
 
-/** Represents a single node (directory) in the path tree */
-class PathTreeNode {
-  /** The root base path used to resolve absolute paths */
-  private base: string;
+/** Classification of a node in the path tree */
+export enum PathTreeNodeType {
+  Dir = 'dir',
+  File = 'file',
+  /** Assigned before the node's type has been resolved */
+  Unknown = 'unknown',
+}
+
+/** Represents a single entry (directory or file) in the path tree */
+export class PathTreeNode {
   /** Reference to the parent node; null for the root node */
   public parent: PathTreeNode | null = null;
-  /** The directory name of this node (not a full path) */
+  /** The entry name of this node (not a full path) */
   public value: string = '';
-  /** Child nodes representing subdirectories */
+  /** Child nodes; non-empty only for directory nodes */
   public children: PathTreeNode[] = [];
-
-  constructor(base: string) {
-    this.base = base;
-  }
+  /** Whether this node is a directory, a file, or not yet resolved */
+  public type: PathTreeNodeType = PathTreeNodeType.Unknown;
 
   /**
-   * Walks up the parent chain to compute this node's relative and absolute paths.
-   * @returns An object containing the relative path from base and the absolute path
+   * Walks up the parent chain to compute this node's relative path from the tree root.
+   * @returns The relative path string using the platform separator
    */
-  getPath(): { relative: string; absolute: string } {
+  getPath(): string {
     let relative = '';
     let current: PathTreeNode = this;
     while (current.parent) {
@@ -60,25 +77,49 @@ class PathTreeNode {
         : current.value;
       current = current.parent;
     }
-    
-    return { relative, absolute: resolve(this.base, relative) };
+    return relative;
   }
 }
 
-/** Builds a tree of directory nodes rooted at a given base path */
+/** Builds a tree of {@link PathTreeNode} entries rooted at a given base path */
 export class PathTreeify {
   /** The root directory to scan */
   private base: string;
-  /** Optional filter applied to each directory during traversal */
-  private filter?: FilterFunction;
+  /**
+   * Optional user-supplied filter. When set, every entry must pass this predicate
+   * in addition to the built-in visibility check.
+   */
+  private userFilter?: FilterFunction;
+  /** When true, files are included as leaf nodes during traversal. Defaults to false */
+  private fileVisible = false;
 
-  constructor({ filter, base }: Partial<PathTreeifyProps>) {
-    if (typeof filter !== 'undefined') {
-      this.validateFilter(filter);
-      this.filter = filter;
+  /**
+   * Determines whether a given entry should be included in the tree.
+   * - If {@link fileVisible} is false, non-directory entries are always excluded.
+   * - If a {@link userFilter} is set, the entry must also satisfy it.
+   * @param absPath - Absolute path of the entry to test
+   * @param name - Entry name (filename or directory name)
+   */
+  private applyFilter(absPath: string, name: string): boolean {
+    if (!this.fileVisible && !PathValidator.isDirectory(absPath)) {
+      return false;
+    }
+    return this.userFilter
+      ? this.userFilter({ name, dirPath: dirname(absPath) })
+      : true;
+  }
+
+  constructor({ filter, base, fileVisible }: Partial<PathTreeifyProps>) {
+    if (typeof fileVisible === 'boolean' && fileVisible) {
+      this.fileVisible = fileVisible;
     }
 
-    if(!base || !PathValidator.isValid(base)) {
+    if (typeof filter !== 'undefined') {
+      this.validateFilter(filter);
+      this.userFilter = filter;
+    }
+
+    if (!base || !PathValidator.isValid(base)) {
       throw new Error(`${base} is not a valid path!`);
     }
 
@@ -90,182 +131,170 @@ export class PathTreeify {
   }
 
   /**
-   * Validates that the provided filter is a function, accepts one parameter,
-   * and returns a boolean. Throws a TypeError if any condition is violated.
+   * Asserts that the provided value is a callable {@link FilterFunction}.
+   * Throws a TypeError if the check fails.
    */
   private validateFilter(filter: any): asserts filter is FilterFunction {
     if (typeof filter !== 'function') {
       throw new TypeError('filter must be a function');
     }
-  
-    if (filter.length !== 1) {
-      throw new TypeError('filter must accept exactly one parameter');
-    }
-    
-    try {
-      const testResult = filter({ name: 'test', postPath: '/test' });
-      if (typeof testResult !== 'boolean') {
-        throw new TypeError('filter must return a boolean');
-      }
-    } catch (error) {
-      throw new TypeError('filter function threw an error during test: ' + error);
-    }
+  }
+
+  /** Creates a new unattached {@link PathTreeNode} */
+  private initNode(): PathTreeNode {
+    return new PathTreeNode();
   }
 
   /**
-   * Creates and optionally attaches a new PathTreeNode to a parent.
-   * @param parent - The parent node to attach to, or null for the root
-   */
-  private initNode(parent: PathTreeNode | null = null): PathTreeNode {
-    const node = new PathTreeNode(this.base);
-    if (parent) {
-      node.parent = parent;
-    }
-    return node;
-  }
-
-  /**
-   * Recursively reads a directory and builds child nodes for each subdirectory.
-   * Applies the instance-level filter if one is set.
+   * Recursively reads {@link dirPath} and builds child nodes for each entry that
+   * passes {@link applyFilter}. Directories are traversed depth-first;
+   * files (when {@link fileVisible} is true) become leaf nodes.
    * @param dirPath - Absolute path of the directory to read
-   * @param parent - The parent node to attach children to
+   * @param parent - The parent node to attach child nodes to
    */
-  private buildChildren(dirPath: string, parent: PathTreeNode) {
+  private buildChildren(dirPath: string, parent: PathTreeNode): PathTreeNode[] {
+    const children: PathTreeNode[] = [];
     const names = readdirSync(dirPath);
-    const children: Array<PathTreeNode> = [];
+
     for (const name of names) {
       const subPath = join(dirPath, name);
-      if (!statSync(subPath).isDirectory()) {
-        continue;
-      }
 
-      if (this.filter && !this.filter({ dirPath, name })) {
+      if (!this.applyFilter(subPath, name)) {
         continue;
       }
 
       const node = this.initNode();
       node.value = name;
       node.parent = parent;
-      node.children = this.buildChildren(subPath, node);
       children.push(node);
+
+      if (this.fileVisible && PathValidator.isFile(subPath)) {
+        node.type = PathTreeNodeType.File;
+        continue;
+      }
+
+      node.type = PathTreeNodeType.Dir;
+      node.children = this.buildChildren(subPath, node);
     }
 
     return children;
   }
 
   /**
-   * Validates that each entry in the array is a string pointing to
-   * an accessible directory relative to the base path.
-   * @param relativeDirNames - Array of relative directory path strings to validate
+   * Validates that every entry in {@link relativeSegments} refers to an accessible
+   * path under {@link base}. When {@link fileVisible} is false, each path must be
+   * a directory; when true, regular files are also accepted.
+   * @param relativeSegments - Relative path strings to validate
    */
-  private checkRelativePaths(relativeDirNames: string[]) {
-    if (!Array.isArray(relativeDirNames)) {
-      throw new Error(`Expected array, got ${typeof relativeDirNames}`);
+  private checkRelativePaths(relativeSegments: string[]): void {
+    if (!Array.isArray(relativeSegments)) {
+      throw new Error(`Expected array, got ${typeof relativeSegments}`);
     }
 
-    for (let i = 0; i < relativeDirNames.length; i++) {
-      const it = relativeDirNames[i];
-      
+    for (let i = 0; i < relativeSegments.length; i++) {
+      const it = relativeSegments[i];
+
       if (typeof it !== 'string') {
         throw new Error(`Item at index ${i} is not a string, got ${typeof it}`);
       }
 
       const absPath = resolve(this.base, it);
+
       if (!PathValidator.isValid(absPath)) {
         throw new Error(`Path does not exist or is not accessible: ${absPath} (from relative path: ${it})`);
       }
-      
+
       if (!PathValidator.isDirectory(absPath)) {
-        throw new Error(`Path is not a directory: ${absPath} (from relative path: ${it})`);
+        if (!this.fileVisible || !PathValidator.isFile(absPath)) {
+          throw new Error(`Path is not a directory: ${absPath} (from relative path: ${it})`);
+        }
       }
     }
   }
 
   /**
-   * Strips leading and trailing slashes from each directory name
-   * and removes any resulting empty strings.
+   * Normalises an array of path strings by splitting on both slash styles,
+   * dropping empty segments, and rejoining with the platform separator.
+   * Entries that reduce to an empty string (e.g. `"///"`) are removed.
+   * @param segments - Raw path strings to normalise
    */
-  private formatDirnames(dirNames: string[]): string[] {
-    return dirNames.map(dir => {
-      // Remove leading and trailing slashes
-      return dir.replace(/^\/+|\/+$/g, '');
-    }).filter(dir => dir !== ''); // Optional: filter empty strings
+  private formatSegments(segments: string[]): string[] {
+    return segments
+      .map(segment => segment.split(/[/\\]/).filter(Boolean).join(sep))
+      .filter(Boolean);
   }
 
-  /** Returns the names of all immediate subdirectories under the base path */
-  private getAllDirNamesUnderBase() {
+  /**
+   * Returns the names of all immediate entries under {@link base} that pass
+   * {@link applyFilter}.
+   */
+  private getAllEntriesUnderBase(): string[] {
     return readdirSync(this.base).filter(name => {
       const abs = resolve(this.base, name);
-
-      if (!PathValidator.isDirectory(abs)) {
-        return false;
-      }
-
-      if (this.filter && !this.filter({ name, dirPath: this.base })) {
-        return false;
-      }
-    
-      return true;
+      return this.applyFilter(abs, name);
     });
   }
 
   /**
-   * Builds a tree rooted at base, containing only the specified subdirectories.
-   * @param dirNames - Relative directory names to include as top-level nodes
+   * Builds a subtree containing only the entries identified by {@link segments}.
+   * Paths are normalised via {@link formatSegments} and validated before use.
+   * @param segments - Relative paths to include as top-level nodes
    */
-  private buildByDirNames(dirNames: string[]) {
+  private buildBySegments(segments: string[]): PathTreeNode {
     const root = this.initNode();
-    const dirNameArr = this.formatDirnames(dirNames);
-    this.checkRelativePaths(dirNameArr);
+    const segmentArr = this.formatSegments(segments);
+    this.checkRelativePaths(segmentArr);
 
-    for (const dirName of dirNameArr) {
+    for (const segment of segmentArr) {
+      const absPath = resolve(this.base, segment);
       const node = this.initNode();
-      node.value = dirName;
+
+      node.value = segment;
       node.parent = root;
-      node.children = this.buildChildren(resolve(this.base, dirName), node);
       root.children.push(node);
+
+      if (this.fileVisible && PathValidator.isFile(absPath)) {
+        node.type = PathTreeNodeType.File;
+      } else {
+        node.type = PathTreeNodeType.Dir;
+        node.children = this.buildChildren(absPath, node);
+      }
     }
 
     return root;
   }
 
   /**
-   * Builds a tree using only the subdirectories under base that pass the given filter.
-   * @param filter - A predicate applied to each top-level directory name
+   * Builds a subtree from top-level entries whose names satisfy {@link filter}.
+   * Note: this predicate only affects top-level selection, not recursive traversal.
+   * For recursive filtering use the `filter` constructor option.
+   * @param filter - Predicate applied to each top-level entry name
    */
-  private buildByFilter(filter: (dirName: string) => boolean): PathTreeNode {
-    const allDirNames = this.getAllDirNamesUnderBase();
-    return this.buildByDirNames(allDirNames.filter(filter));
+  private buildByFilter(filter: (segment: string) => boolean): PathTreeNode {
+    const segments = this.getAllEntriesUnderBase();
+    return this.buildBySegments(segments.filter(filter));
   }
 
   /**
-   * Computes the relative and absolute paths for a given node
-   * by walking up the parent chain.
+   * Returns the relative and absolute paths for a given node by delegating to
+   * {@link PathTreeNode.getPath} and resolving against {@link base}.
    */
   getPathBy(node: PathTreeNode): { relative: string; absolute: string } {
-    let relative = '';
-    let current = node;
-    while (current.parent) {
-      relative = relative
-        ? `${current.value}${sep}${relative}`
-        : current.value;
-      current = current.parent;
-    }
-    
+    const relative = node.getPath();
     return { relative, absolute: resolve(this.base, relative) };
   }
 
-  /** Overload: build the tree from an explicit list of relative directory names */
-  buildBy(dirNames: string[]): PathTreeNode;
-  /** Overload: build the tree from a predicate applied to top-level directory names */
-  buildBy(filter: (dirName: string) => boolean): PathTreeNode;
+  /** Overload: build the tree from an explicit list of relative path segments */
+  buildBy(segments: string[]): PathTreeNode;
+  /** Overload: build the tree from a predicate applied to top-level entry names */
+  buildBy(filter: (segment: string) => boolean): PathTreeNode;
   /**
-   * Builds a subtree based on either an array of directory names or a filter function.
-   * Throws if the argument is neither.
+   * Builds a subtree from either an array of path segments or a filter function.
+   * @throws {TypeError} If the argument is neither an array nor a function
    */
   buildBy(argv: any): PathTreeNode {
     if (Array.isArray(argv)) {
-      return this.buildByDirNames(argv);
+      return this.buildBySegments(argv);
     }
 
     if (typeof argv === 'function') {
@@ -277,9 +306,9 @@ export class PathTreeify {
     );
   }
 
-  /** Builds a full tree from all immediate subdirectories under the base path */
-  build() {
-    const dirNameArr = this.getAllDirNamesUnderBase();
-    return this.buildByDirNames(dirNameArr);
+  /** Builds a full tree from all immediate entries under the base path */
+  build(): PathTreeNode {
+    const segments = this.getAllEntriesUnderBase();
+    return this.buildBySegments(segments);
   }
 }
