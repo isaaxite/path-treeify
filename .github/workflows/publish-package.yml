@@ -124,7 +124,7 @@ jobs:
         run: npm run build:prod
 
       - name: Publish latest to npm
-        if: inputs.platform == 'all' || inputs.platform == 'github'
+        if: inputs.platform == 'all' || inputs.platform == 'npm'
         run: npm run publish:latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
