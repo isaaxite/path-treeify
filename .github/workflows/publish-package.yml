@@ -3,6 +3,15 @@ name: Publish Package
 on:
   workflow_dispatch:
     inputs:
+      platform:
+        description: 'Target platform'
+        required: true
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - github
+          - npm
       publish_type:
         description: 'Tags of package'
         required: true
@@ -52,9 +61,35 @@ jobs:
         run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
     
       - name: Publish beta to npm
+        if: inputs.platform == 'all' || inputs.platform == 'npm'
         run: npm run publish:beta
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Setup Node.js for GitHub Packages
+        if: inputs.platform == 'all' || inputs.platform == 'github'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://npm.pkg.github.com
+
+      - name: Update package.json for GitHub Packages
+        if: inputs.platform == 'all' || inputs.platform == 'github'
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const owner = '${{ github.repository_owner }}';
+            pkg.name = '@' + owner + '/' + pkg.name;
+            pkg.publishConfig = { registry: 'https://npm.pkg.github.com' };
+            fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Publish beta to GitHub Packages
+        if: inputs.platform == 'all' || inputs.platform == 'github'
+        run: npm run publish:beta
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # -------------------------------------------------------
   # Release PR 合并后，发布正式 latest 版本到 npm
