@@ -1,5 +1,5 @@
 <div align="center">
-  <img alt="LOGO" src="https://assets-amu.pages.dev/path-treeify/logo.png">
+  <img alt="LOGO"  width="320" src="https://assets-amu.pages.dev/path-treeify/logo.png">
 </div>
 <br/>
 
@@ -13,6 +13,9 @@
   </a>
   <a href="https://nodejs.org">
     <img alt="node" src="https://img.shields.io/node/v/path-treeify">
+  </a>
+  <a href="https://github.com/isaaxite/path-treeify/blob/main/CHANGELOG.md">
+    <img alt="CHANGELOG" src="https://img.shields.io/badge/changelog-maintained-brightgreen">
   </a>
   <a href="https://github.com/isaaxite/path-treeify/blob/main/LICENSE">
     <img alt="GitHub License" src="https://img.shields.io/github/license/isaaxite/path-treeify">
