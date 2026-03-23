@@ -23,104 +23,19 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: node
 
-      - name: Trigger Build Workflow
-        if: steps.release.outputs.pr != ''
-        run: |
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2026-03-10" \
-            /repos/isaaxite/path-treeify/actions/workflows/unittests.yml/dispatches \
-            -f ref=main \
-            -f inputs[commit_sha]="${{ github.sha }}"
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }} 
-
-  # -------------------------------------------------------
-  # fix/feat 等有效变更 push 时，发布 beta 版本到 npm
-  # 判断依据：release-please 维护着一个待合并的 Release PR（pr 有值）
-  # -------------------------------------------------------
-  publish-beta:
-    runs-on: ubuntu-latest
-    needs: release-please
-    if: |
-      needs.release-please.outputs.pr != '' &&
-      needs.release-please.outputs.release_created != 'true'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - name: Trigger Test Workflow
+        uses: actions/github-script@v8
         with:
-          ref: ${{ github.ref }}  # 检出触发 Release 的那个 commit
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          registry-url: https://registry.npmjs.org
-
-      - name: Cache dependencies
-        id: cache-dependencies
-        uses: actions/cache@v5
-        with:
-          path: ./node_modules
-          key: dependencies-${{ runner.os }}-node-${{ hashFiles('./pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        if: steps.cache-dependencies.outputs.cache-hit != 'true'
-        run: npm install -g pnpm && pnpm i --frozen-lockfile
-
-      - name: Build
-        run: npm run build:prod
-
-      - name: Compute beta version
-        id: version
-        run: |
-          BASE=$(node -p "require('./package.json').version")
-          SHA=$(git rev-parse --short HEAD)
-          echo "version=${BASE}-beta.${SHA}" >> "$GITHUB_OUTPUT"
-
-      - name: Bump version to beta (in-memory, not committed)
-        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
-    
-      - name: Publish beta to npm
-        run: npm run publish:beta
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  # -------------------------------------------------------
-  # Release PR 合并后，发布正式 latest 版本到 npm
-  # -------------------------------------------------------
-  publish-latest:
-    runs-on: ubuntu-latest
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.ref }}  # 检出触发 Release 的那个 commit
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          registry-url: https://registry.npmjs.org
-      
-      - name: Cache dependencies
-        id: cache-dependencies
-        uses: actions/cache@v5
-        with:
-          path: ./node_modules
-          key: dependencies-${{ runner.os }}-node-${{ hashFiles('./pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        if: steps.cache-dependencies.outputs.cache-hit != 'true'
-        run: npm install -g pnpm && pnpm i --frozen-lockfile
-
-      - name: Build
-        run: npm run build:prod
-
-      - name: Publish latest to npm
-        run: npm run publish:latest
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
+          script: |
+            const releaseCreated = ${{ steps.release.outputs.release_created || 'false' }};
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'unittests.yml',
+              ref: 'main',
+              inputs: {
+                commit_sha: context.sha,
+                publish_type: releaseCreated ? 'latest' : 'beta',
+              }
+            })

@@ -6,9 +6,18 @@ on:
       commit_sha:
         description: 'Commit SHA to report coverage for'
         required: false
+      publish_type:
+        description: 'Tags of package'
+        required: true
+        type: choice
+        default: 'none'
+        options:
+          - beta
+          - latest
+          - none
 
 jobs:
-   converage-unitests:
+  converage-unitests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -41,18 +50,9 @@ jobs:
       - name: Run tests with junit
         run: npm run test:junit
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          report_type: coverage
-          flags: unittests
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
-          disable_search: true
-          files: ./reports/coverage/lcov.info
-          verbose: true
-          override_commit: ${{ inputs.commit_sha || github.sha }}
-          override_branch: ${{ github.ref_name }}
+      - name: Inject classname into testcase
+        run: |
+          sed -i 's/<testcase name="/<testcase classname="path-treeify.Default" name="/g' reports/junit.xml
 
       - name: Upload to Coveralls
         uses: coverallsapp/github-action@v2
@@ -60,14 +60,31 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: ./reports/coverage/lcov.info
 
-      - name: Upload test result to Codecov
-        uses: codecov/codecov-action@v5
+      - name: Publish test report
+        uses: dorny/test-reporter@v1
+        if: always()
         with:
-          report_type: test_results
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
-          disable_search: true
-          files: ./reports/junit.xml
-          verbose: true
-          override_commit: ${{ inputs.commit_sha || github.sha }}
-          override_branch: ${{ github.ref_name }}
+          name: AVA Tests
+          path: reports/junit.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  trigger-build-workflow:
+    needs: ['converage-unitests']
+    if: inputs.publish_type != 'none'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GH_TOKEN }}
+          script: |
+            const publishType = '${{ inputs.publish_type }}';
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'publish-package.yml',
+              ref: 'main',
+              inputs: {
+                publish_type: publishType,
+              }
+            })

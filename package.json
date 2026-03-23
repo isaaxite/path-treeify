@@ -26,7 +26,7 @@
   "scripts": {
     "test": "ava",
     "test:coverage": "c8 ava",
-    "test:junit": "mkdir -p reports && ava --tap | tap-xunit > reports/junit.xml",
+    "test:junit": "mkdir -p reports && ava --tap | tap-xunit --package=path-treeify > reports/junit.xml",
     "test:report": "rimraf reports && npm run test:coverage && npm run test:junit",
     "clean": "rimraf dist",
     "build": "npm run clean && rollup -c",
