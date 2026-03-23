@@ -24,6 +24,9 @@ jobs:
           release-type: node
 
       - name: Trigger Test Workflow
+        if: |
+          steps.release.outputs.pr != '' ||
+          steps.release.outputs.release_created != 'true'
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GH_TOKEN }}
