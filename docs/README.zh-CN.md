@@ -24,7 +24,7 @@
     <img alt="GitHub Created At" src="https://img.shields.io/github/created-at/isaaxite/path-treeify">
   </a>
   <a href="https://github.com/isaaxite/path-treeify">
-    <img alt="GitHub code size in bytes" src="https://img.shields.io/github/languages/code-size/isaaxite/path-treeify">
+    <img alt="NPM Unpacked Size" src="https://img.shields.io/npm/unpacked-size/path-treeify">
   </a>
   <a href="https://github.com/isaaxite/path-treeify/commits/main/">
     <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/isaaxite/path-treeify">
