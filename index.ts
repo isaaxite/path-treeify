@@ -13,6 +13,12 @@ interface PathTreeifyProps {
   /** When true, files are included as leaf nodes alongside directories. Defaults to false */
   fileVisible?: boolean;
 
+  /**
+   * When true, the result of {@link PathTreeNode.getPath} is memoised on each node
+   * after the first call. Subsequent calls return the same object reference without
+   * re-walking the parent chain. Useful when nodes are accessed repeatedly.
+   * Defaults to false.
+   */
   usePathCache?: boolean;
 }
 
@@ -71,8 +77,10 @@ export interface PathTreeNode {
   /** Whether this node is a directory, a file, or not yet resolved */
   type: PathTreeNodeKind;
   /**
-   * Computes this node's paths using the `parentRelative` stored on the siblings'
-   * shared prototype by {@link PathTreeify.buildChildren}.
+   * Walks up the parent chain to compute this node's relative and absolute paths.
+   * When the owning {@link PathTreeify} instance was created with `usePathCache: true`,
+   * the result is memoised after the first call and the same object is returned on
+   * every subsequent call.
    * @returns `relative` — path from the tree root; `absolute` — fully resolved path on disk
    */
   getPath(): { relative: string; absolute: string };
@@ -80,8 +88,9 @@ export interface PathTreeNode {
 
 /**
  * Shared prototype object for all nodes produced by a single {@link PathTreeify} instance.
- * Stores `base` once on the prototype rather than duplicating it across every node instance,
- * so that `getPath()` can resolve absolute paths without each node holding a redundant copy.
+ * Stores `base` and `usePathCache` once on the prototype rather than duplicating them
+ * across every node instance, so that `getPath()` can resolve absolute paths without
+ * each node holding a redundant copy.
  */
 class PathTreeNodeShared {
   private base: string;
@@ -95,12 +104,14 @@ class PathTreeNodeShared {
   }
 
   /**
-   * Computes this node's relative and absolute paths.
+   * Walks up the parent chain to compute this node's relative and absolute paths.
    *
-   * Instead of walking the full parent chain on every call, this method relies on
-   * `parentRelative` — a string injected onto the intermediate prototype of `children[0]`
-   * by {@link PathTreeify.buildChildren} after each sibling group is assembled.
-   * All siblings in the same group share that prototype, so the look-up is O(1).
+   * When `usePathCache` is `false` (default), the parent chain is walked on every call
+   * and a new result object is returned each time.
+   *
+   * When `usePathCache` is `true`, the result is computed once and stored as `_pathCache`
+   * directly on the node instance. Subsequent calls return the cached object, making
+   * repeated access O(1) after the first call.
    *
    * @returns `relative` — sep-joined path from the tree root to this node;
    *          `absolute` — fully resolved path on disk
@@ -198,9 +209,12 @@ export class PathTreeify {
 
   /**
    * Creates a new unattached {@link PathTreeNode}.
-   * The node's prototype is set to {@link pathTreeNodeShared} so that `base` and
-   * `getPath` are inherited without being stored on each instance individually.
-   * `depth` are initialised to `-1` and must be set by the caller.
+   * The node is created with a two-layer prototype chain:
+   * `node → cache → pathTreeNodeShared`. The intermediate `cache` layer is a
+   * per-node object that holds `_pathCache` when `usePathCache` is enabled,
+   * keeping the cached value isolated to each node while still inheriting `base`
+   * and `getPath` from `pathTreeNodeShared`.
+   * `depth` is initialised to `-1` and must be set by the caller.
    */
   private initNode(): PathTreeNode {
     const cache = Object.create(this.pathTreeNodeShared);
@@ -217,10 +231,6 @@ export class PathTreeify {
    * Recursively reads {@link dirPath} and builds child nodes for each entry that
    * passes {@link applyFilter}. Directories are traversed depth-first;
    * files (when {@link fileVisible} is true) become leaf nodes.
-   *
-   * After assembling the sibling group, injects `parentRelative` onto a new intermediate
-   * prototype shared by `children[0]`. This allows {@link PathTreeNodeShared.getPath} to
-   * resolve paths in O(1) without walking the full parent chain on every call.
    *
    * @param dirPath  - Absolute path of the directory to read
    * @param parent   - The parent node to attach child nodes to
