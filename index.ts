@@ -189,9 +189,9 @@ export class PathTreeify {
    * @param dirPath - Absolute path of the directory to read
    * @param parent - The parent node to attach child nodes to
    */
-  private buildChildren(dirPath: string, parent: PathTreeNode): PathTreeNode[] {
+  private buildChildren(dirPath: string, parent: PathTreeNode, segments?: string[]): PathTreeNode[] {
     const children: PathTreeNode[] = [];
-    const names = readdirSync(dirPath);
+    const names = segments || readdirSync(dirPath);
 
     for (const name of names) {
       const subPath = join(dirPath, name);
@@ -280,23 +280,9 @@ export class PathTreeify {
   private buildBySegments(segments: string[]): PathTreeNode {
     const root = this.initNode();
     const segmentArr = this.formatSegments(segments);
+
     this.checkRelativePaths(segmentArr);
-
-    for (const segment of segmentArr) {
-      const absPath = resolve(this.base, segment);
-      const node = this.initNode();
-
-      node.value = segment;
-      node.parent = root;
-      root.children.push(node);
-
-      if (this.fileVisible && PathValidator.isFile(absPath)) {
-        node.type = PathTreeNodeKind.File;
-      } else {
-        node.type = PathTreeNodeKind.Dir;
-        node.children = this.buildChildren(absPath, node);
-      }
-    }
+    root.children = this.buildChildren(this.base, root, segmentArr);
 
     return root;
   }
