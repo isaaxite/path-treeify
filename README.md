@@ -35,8 +35,8 @@
   <a href="https://github.com/isaaxite/path-treeify/commits/main/">
     <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/isaaxite/path-treeify">
   </a>
-  <a href='https://codecov.io/github/isaaxite/path-treeify/tests'>
-    <img src='https://github.com/isaaxite/path-treeify/actions/workflows/unittests.yml/badge.svg' alt='Coverage Status' />
+  <a href='https://github.com/isaaxite/path-treeify/actions/workflows/unittests.yml'>
+    <img src='https://github.com/isaaxite/path-treeify/actions/workflows/unittests.yml/badge.svg' alt='Test CI Status' />
   </a>
   <a href='https://coveralls.io/github/isaaxite/path-treeify'>
     <img src='https://coveralls.io/repos/github/isaaxite/path-treeify/badge.svg' alt='Coverage Status' />
@@ -50,9 +50,11 @@
 - 🌲 Builds a recursive tree from one or more directory paths
 - 🔗 Each node carries a `parent` circular reference for upward traversal
 - 📍 Each node exposes a `getPath()` method to retrieve its own paths directly
-- 🔍 Optional `filter` callback applied at **every depth**, including top-level directories
+- 🏷️ Each node has a `type` field — `PathTreeNodeKind.Dir` or `PathTreeNodeKind.File`
+- 👁️ `fileVisible` option includes files as leaf nodes alongside directories
+- 🔍 Optional `filter` callback applied at **every depth**, including top-level entries
 - ⚡ `build()` scans the entire `base` directory with zero configuration
-- 🎛️ `buildBy()` accepts either a directory name array or a top-level filter function
+- 🎛️ `buildBy()` accepts either a path segment array or a top-level filter function
 - 📦 Ships as both ESM (`index.mjs`) and CJS (`index.cjs`) with full TypeScript types
 - 🚫 Zero runtime dependencies
 
@@ -79,18 +81,27 @@ yarn add path-treeify
 ## Quick Start
 
 ```ts
-import { PathTreeify } from 'path-treeify';
+import { PathTreeify, PathTreeNodeKind } from 'path-treeify';
 
+// Directories only (default)
 const treeify = new PathTreeify({ base: '/your/project/root' });
+const tree = treeify.build();
 
-// Scan specific directories by name
-const tree = treeify.buildBy(['src', 'tests']);
+// Include files as leaf nodes
+const treeifyWithFiles = new PathTreeify({
+  base: '/your/project/root',
+  fileVisible: true,
+});
+const fullTree = treeifyWithFiles.build();
 
-// Scan with a top-level filter function
-const filtered = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith('.'));
-
-// Or scan everything under base at once
-const fullTree = treeify.build();
+// Check node type
+for (const child of tree.children) {
+  if (child.type === PathTreeNodeKind.Dir) {
+    console.log('dir:', child.value);
+  } else if (child.type === PathTreeNodeKind.File) {
+    console.log('file:', child.value);
+  }
+}
 ```
 
 ---
@@ -101,10 +112,11 @@ const fullTree = treeify.build();
 
 Creates a new instance.
 
-| Option   | Type                          | Required | Description                                                                 |
-|----------|-------------------------------|----------|-----------------------------------------------------------------------------|
-| `base`   | `string`                      | ✅        | Absolute path to the root directory to scan from                           |
-| `filter` | `FilterFunction` (see below)  | ❌        | Applied at **every depth** — top-level directories included                |
+| Option        | Type                         | Required | Description                                                              |
+|---------------|------------------------------|----------|--------------------------------------------------------------------------|
+| `base`        | `string`                     | ✅        | Absolute path to the root directory to scan from                        |
+| `filter`      | `FilterFunction` (see below) | ❌        | Applied at **every depth** — top-level entries included                 |
+| `fileVisible` | `boolean`                    | ❌        | When `true`, files are included as leaf nodes. Defaults to `false`      |
 
 `base` must exist and be a directory, otherwise the constructor throws.
 
@@ -116,14 +128,14 @@ Used as the `filter` option in the constructor. Applied at every level of the tr
 
 ```ts
 type FilterFunction = (params: {
-  name: string;    // directory name (leaf segment)
+  name: string;    // entry name (file or directory name)
   dirPath: string; // absolute path of the parent directory
 }) => boolean;
 ```
 
-Return `true` to **include** the directory and recurse into it; `false` to **skip** it entirely.
+Return `true` to **include** the entry; `false` to **skip** it entirely.
 
-**Example — exclude `node_modules` and hidden directories at every depth:**
+**Example — exclude `node_modules` and hidden entries at every depth:**
 
 ```ts
 const treeify = new PathTreeify({
@@ -136,7 +148,7 @@ const treeify = new PathTreeify({
 
 ### `build(): PathTreeNode`
 
-Scans all subdirectories directly under `base` (applying the instance-level `filter` if set) and returns a synthetic root `PathTreeNode`.
+Scans all entries directly under `base` that pass the instance-level `filter` and returns a synthetic root `PathTreeNode`. When `fileVisible` is `true`, files are included as leaf nodes.
 
 ```ts
 const tree = treeify.build();
@@ -144,69 +156,85 @@ const tree = treeify.build();
 
 ---
 
-### `buildBy(dirNames: string[]): PathTreeNode`
+### `buildBy(segments: string[]): PathTreeNode`
 
-Builds a tree from the given list of directory names (relative to `base`).
+Builds a tree from the given list of relative path segments. When `fileVisible` is `true`, file paths are also accepted.
 
 ```ts
 const tree = treeify.buildBy(['src', 'docs', 'tests']);
+
+// With fileVisible: true, files can also be specified
+const treeWithFiles = new PathTreeify({ base: '/your/project', fileVisible: true });
+treeWithFiles.buildBy(['src', 'README.md']);
 ```
 
-- Leading and trailing slashes are stripped automatically.
-- Throws if any name does not resolve to a valid directory under `base`.
+- Both `/` and `\` separators are normalised automatically.
+- Leading/trailing slashes and empty segments are stripped.
+- Throws if any segment does not resolve to a valid entry under `base`.
 
-### `buildBy(filter: (dirName: string) => boolean): PathTreeNode`
+### `buildBy(filter: (segment: string) => boolean): PathTreeNode`
 
-Collects all top-level subdirectories under `base`, applies the given predicate to select which ones to include, then builds a tree from the matching names. The instance-level `filter` still applies during deep traversal.
+Collects all top-level entries under `base`, applies the predicate to select which ones to include, then builds a tree. The instance-level `filter` still applies during deep traversal.
 
 ```ts
 const tree = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith('.'));
 ```
 
-> **Note:** the predicate passed to `buildBy(fn)` only selects which **top-level** directories to include. To filter directories at every depth, pass a `filter` to the constructor.
-
----
-
-### `getPathBy(node: PathTreeNode): { relative: string; absolute: string }`
-
-Walks a node's `parent` chain to reconstruct its full path. Equivalent to calling `node.getPath()` directly.
-
-```ts
-const { relative, absolute } = treeify.getPathBy(node);
-// relative → e.g. 'src/components'
-// absolute → e.g. '/your/project/src/components'
-```
+> **Note:** the predicate passed to `buildBy(fn)` only selects which **top-level** entries to include. To filter entries at every depth, pass a `filter` to the constructor.
 
 ---
 
 ### `PathTreeNode`
 
-`PathTreeNode` is a **class** with its own `getPath()` method, so you can retrieve a node's path without passing it back to the `PathTreeify` instance.
+`PathTreeNode` is an **interface** — each node exposes a `getPath()` method to retrieve its paths without needing the `PathTreeify` instance.
 
 ```ts
-class PathTreeNode {
-  parent:   PathTreeNode | null; // null only on the synthetic root
-  value:    string;              // directory name for this node
-  children: PathTreeNode[];
+interface PathTreeNode {
+  parent:   PathTreeNode | null;  // null only on the synthetic root
+  value:    string;               // entry name for this node
+  children: PathTreeNode[];       // empty for file nodes
+  type:     PathTreeNodeKind;     // Dir, File, or Unknown
 
   getPath(): { relative: string; absolute: string };
 }
 ```
 
-`node.getPath()` returns the same result as `treeify.getPathBy(node)` — both are available for convenience.
-
 > ⚠️ **Circular references** — `parent` points back up the tree. Use `JSON.stringify` replacers or a library like `flatted` if you need to serialize the result.
+
+---
+
+### `PathTreeNodeKind`
+
+An enum classifying each node's filesystem type.
+
+```ts
+enum PathTreeNodeKind {
+  Dir     = 'dir',
+  File    = 'file',
+  Unknown = 'unknown', // assigned before the type is resolved
+}
+```
 
 ---
 
 ## Examples
 
-### Scan an entire base directory
+### Directories only (default)
 
 ```ts
 import { PathTreeify } from 'path-treeify';
 
 const treeify = new PathTreeify({ base: '/your/project' });
+const tree = treeify.build();
+```
+
+### Include files as leaf nodes
+
+```ts
+const treeify = new PathTreeify({
+  base: '/your/project',
+  fileVisible: true,
+});
 const tree = treeify.build();
 ```
 
@@ -220,13 +248,13 @@ const treeify = new PathTreeify({
 const tree = treeify.build();
 ```
 
-### Scan specific directories
+### Scan specific paths
 
 ```ts
 const tree = treeify.buildBy(['src', 'tests', 'docs']);
 ```
 
-### Select top-level directories with a predicate
+### Select top-level entries with a predicate
 
 ```ts
 const tree = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith('.'));
@@ -238,7 +266,7 @@ const tree = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith
 function printPaths(node) {
   for (const child of node.children) {
     const { absolute } = child.getPath();
-    console.log(absolute);
+    console.log(`[${child.type}] ${absolute}`);
     printPaths(child);
   }
 }
@@ -249,7 +277,7 @@ printPaths(tree);
 ### CommonJS usage
 
 ```js
-const { PathTreeify } = require('path-treeify');
+const { PathTreeify, PathTreeNodeKind } = require('path-treeify');
 
 const treeify = new PathTreeify({ base: __dirname });
 const tree = treeify.build();
