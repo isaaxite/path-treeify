@@ -46,15 +46,24 @@ class PathValidator {
 }
 
 /** Classification of a node in the path tree */
-export enum PathTreeNodeType {
+export enum PathTreeNodeKind {
   Dir = 'dir',
   File = 'file',
   /** Assigned before the node's type has been resolved */
   Unknown = 'unknown',
 }
 
+export interface PathTreeNode {
+  parent: PathTreeNode | null;
+  value: string;
+  children: PathTreeNode[];
+  type: PathTreeNodeKind;
+  getPath(): { relative: string; absolute: string };
+}
+
 /** Represents a single entry (directory or file) in the path tree */
-export class PathTreeNode {
+class PathTreeNodeImpl implements PathTreeNode {
+  private base: string;
   /** Reference to the parent node; null for the root node */
   public parent: PathTreeNode | null = null;
   /** The entry name of this node (not a full path) */
@@ -62,13 +71,17 @@ export class PathTreeNode {
   /** Child nodes; non-empty only for directory nodes */
   public children: PathTreeNode[] = [];
   /** Whether this node is a directory, a file, or not yet resolved */
-  public type: PathTreeNodeType = PathTreeNodeType.Unknown;
+  public type: PathTreeNodeKind = PathTreeNodeKind.Unknown;
+
+  constructor(base: string) {
+    this.base = base;
+  }
 
   /**
    * Walks up the parent chain to compute this node's relative path from the tree root.
    * @returns The relative path string using the platform separator
    */
-  getPath(): string {
+  getPath() {
     let relative = '';
     let current: PathTreeNode = this;
     while (current.parent) {
@@ -77,7 +90,7 @@ export class PathTreeNode {
         : current.value;
       current = current.parent;
     }
-    return relative;
+    return { relative, absolute: resolve(this.base, relative) };
   }
 }
 
@@ -142,7 +155,7 @@ export class PathTreeify {
 
   /** Creates a new unattached {@link PathTreeNode} */
   private initNode(): PathTreeNode {
-    return new PathTreeNode();
+    return new PathTreeNodeImpl(this.base);
   }
 
   /**
@@ -169,11 +182,11 @@ export class PathTreeify {
       children.push(node);
 
       if (this.fileVisible && PathValidator.isFile(subPath)) {
-        node.type = PathTreeNodeType.File;
+        node.type = PathTreeNodeKind.File;
         continue;
       }
 
-      node.type = PathTreeNodeType.Dir;
+      node.type = PathTreeNodeKind.Dir;
       node.children = this.buildChildren(subPath, node);
     }
 
@@ -254,9 +267,9 @@ export class PathTreeify {
       root.children.push(node);
 
       if (this.fileVisible && PathValidator.isFile(absPath)) {
-        node.type = PathTreeNodeType.File;
+        node.type = PathTreeNodeKind.File;
       } else {
-        node.type = PathTreeNodeType.Dir;
+        node.type = PathTreeNodeKind.Dir;
         node.children = this.buildChildren(absPath, node);
       }
     }
@@ -273,15 +286,6 @@ export class PathTreeify {
   private buildByFilter(filter: (segment: string) => boolean): PathTreeNode {
     const segments = this.getAllEntriesUnderBase();
     return this.buildBySegments(segments.filter(filter));
-  }
-
-  /**
-   * Returns the relative and absolute paths for a given node by delegating to
-   * {@link PathTreeNode.getPath} and resolving against {@link base}.
-   */
-  getPathBy(node: PathTreeNode): { relative: string; absolute: string } {
-    const relative = node.getPath();
-    return { relative, absolute: resolve(this.base, relative) };
   }
 
   /** Overload: build the tree from an explicit list of relative path segments */
