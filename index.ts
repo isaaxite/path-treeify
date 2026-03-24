@@ -58,7 +58,9 @@ export enum PathTreeNodeKind {
  * Consumers receive this type; the internal implementation class is not exported.
  */
 export interface PathTreeNode {
+  /** Zero-based position of this node among its siblings */
   idx: number;
+  /** Distance from the root node; root itself is 0, its direct children are 1, and so on */
   depth: number;
   /** Reference to the parent node; null for the root node */
   parent: PathTreeNode | null;
@@ -69,7 +71,8 @@ export interface PathTreeNode {
   /** Whether this node is a directory, a file, or not yet resolved */
   type: PathTreeNodeKind;
   /**
-   * Walks up the parent chain to compute this node's paths.
+   * Computes this node's paths using the `parentRelative` stored on the siblings'
+   * shared prototype by {@link PathTreeify.buildChildren}.
    * @returns `relative` — path from the tree root; `absolute` — fully resolved path on disk
    */
   getPath(): { relative: string; absolute: string };
@@ -88,8 +91,15 @@ class PathTreeNodeShared {
   }
 
   /**
-   * Walks up the parent chain to compute this node's relative path from the tree root.
-   * @returns The relative path string using the platform separator
+   * Computes this node's relative and absolute paths.
+   *
+   * Instead of walking the full parent chain on every call, this method relies on
+   * `parentRelative` — a string injected onto the intermediate prototype of `children[0]`
+   * by {@link PathTreeify.buildChildren} after each sibling group is assembled.
+   * All siblings in the same group share that prototype, so the look-up is O(1).
+   *
+   * @returns `relative` — sep-joined path from the tree root to this node;
+   *          `absolute` — fully resolved path on disk
    */
   getPath() {
     const current = this as any;
@@ -170,6 +180,7 @@ export class PathTreeify {
    * Creates a new unattached {@link PathTreeNode}.
    * The node's prototype is set to {@link pathTreeNodeShared} so that `base` and
    * `getPath` are inherited without being stored on each instance individually.
+   * `idx` and `depth` are initialised to `-1` and must be set by the caller.
    */
   private initNode(): PathTreeNode {
     const node: PathTreeNode = Object.create(this.pathTreeNodeShared);
@@ -186,8 +197,16 @@ export class PathTreeify {
    * Recursively reads {@link dirPath} and builds child nodes for each entry that
    * passes {@link applyFilter}. Directories are traversed depth-first;
    * files (when {@link fileVisible} is true) become leaf nodes.
-   * @param dirPath - Absolute path of the directory to read
-   * @param parent - The parent node to attach child nodes to
+   *
+   * After assembling the sibling group, injects `parentRelative` onto a new intermediate
+   * prototype shared by `children[0]`. This allows {@link PathTreeNodeShared.getPath} to
+   * resolve paths in O(1) without walking the full parent chain on every call.
+   *
+   * @param dirPath  - Absolute path of the directory to read
+   * @param parent   - The parent node to attach child nodes to
+   * @param segments - Optional explicit list of entry names to use instead of reading the
+   *                   directory from disk; used by {@link buildBySegments} to skip a
+   *                   redundant `readdirSync` when the segment list is already known
    */
   private buildChildren(dirPath: string, parent: PathTreeNode, segments?: string[]): PathTreeNode[] {
     const children: PathTreeNode[] = [];
@@ -218,6 +237,9 @@ export class PathTreeify {
     }
 
     if (idx > 0) {
+      // Inject parentRelative onto an intermediate prototype shared by children[0].
+      // All siblings read parentRelative through children[0]'s prototype chain,
+      // so the value is stored exactly once per sibling group rather than per node.
       let prototype = Object.getPrototypeOf(children[0]);
       prototype = Object.create(prototype);
       prototype.parentRelative = dirPath.replace(`${this.base}${sep}`, '');
@@ -231,7 +253,8 @@ export class PathTreeify {
    * Validates that every entry in {@link relativeSegments} refers to an accessible
    * path under {@link base}. When {@link fileVisible} is false, each path must be
    * a directory; when true, regular files are also accepted.
-   * @param relativeSegments - Relative path strings to validate
+   * @param relativeSegments - Relative path strings to validate; assumed to be a string
+   *                           array (callers are responsible for type safety at the boundary)
    */
   private checkRelativePaths(relativeSegments: string[]): void {
     for (let i = 0; i < relativeSegments.length; i++) {
@@ -279,9 +302,11 @@ export class PathTreeify {
   }
 
   /**
-   * Builds a subtree containing only the entries identified by {@link segments}.
-   * Paths are normalised via {@link formatSegments} and validated before use.
-   * @param segments - Relative paths to include as top-depth nodes
+   * Builds a subtree whose top-depth children correspond to {@link segments}.
+   * The root node is created at depth 0; children are built by delegating to
+   * {@link buildChildren}, passing {@link segments} directly to avoid a redundant
+   * `readdirSync` of the base directory.
+   * @param segments - Normalised and validated relative path segments
    */
   private buildBySegments(segments: string[]): PathTreeNode {
     const root = this.initNode();
@@ -307,6 +332,8 @@ export class PathTreeify {
   buildBy(filter: (segment: string) => boolean): PathTreeNode;
   /**
    * Builds a subtree from either an array of path segments or a filter function.
+   * When an array is supplied, segments are normalised via {@link formatSegments}
+   * and validated via {@link checkRelativePaths} before the tree is built.
    * @throws {TypeError} If the argument is neither an array nor a function
    */
   buildBy(argv: any): PathTreeNode {
