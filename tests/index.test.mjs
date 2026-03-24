@@ -141,6 +141,18 @@ test('constructor — accepts fileVisible: false', t => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Constructor — usePathCache option
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('constructor — accepts usePathCache: true', t => {
+  t.notThrows(() => new PathTreeify({ base: tmpRoot, usePathCache: true }));
+});
+
+test('constructor — accepts usePathCache: false', t => {
+  t.notThrows(() => new PathTreeify({ base: tmpRoot, usePathCache: false }));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // build() — root node shape
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -158,6 +170,57 @@ test('build() — root type is Unknown', t => {
 
 test('build() — root children is an array', t => {
   t.true(Array.isArray(new PathTreeify({ base: tmpRoot }).build().children));
+});
+
+test('build() — root depth is 0', t => {
+  t.is(new PathTreeify({ base: tmpRoot }).build().depth, 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// build() — depth field
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('build() — top-level children have depth 1', t => {
+  for (const child of new PathTreeify({ base: tmpRoot }).build().children) {
+    t.is(child.depth, 1);
+  }
+});
+
+test('build() — grandchildren have depth 2', t => {
+  const root = new PathTreeify({ base: tmpRoot }).build();
+  const src  = root.children.find(n => n.value === 'src');
+  for (const grandchild of src.children) {
+    t.is(grandchild.depth, 2);
+  }
+});
+
+test('build() — depth increments correctly through 3 levels', t => {
+  const deepRoot = join('/tmp', `pt-depth-${Date.now()}`);
+  mkdirSync(join(deepRoot, 'a', 'b', 'c'), { recursive: true });
+  try {
+    const root = new PathTreeify({ base: deepRoot }).build();
+    const a = root.children.find(n => n.value === 'a');
+    const b = a.children.find(n => n.value === 'b');
+    const c = b.children.find(n => n.value === 'c');
+    t.is(root.depth, 0);
+    t.is(a.depth, 1);
+    t.is(b.depth, 2);
+    t.is(c.depth, 3);
+  } finally {
+    rmSync(deepRoot, { recursive: true, force: true });
+  }
+});
+
+test('buildBy([]) — top-level nodes have depth 1', t => {
+  for (const child of new PathTreeify({ base: tmpRoot }).buildBy(['src', 'dist']).children) {
+    t.is(child.depth, 1);
+  }
+});
+
+test('fileVisible: true — file nodes have correct depth', t => {
+  const root   = new PathTreeify({ base: tmpRoot, fileVisible: true }).build();
+  const readme = root.children.find(n => n.value === 'README.md');
+  t.is(readme.depth, 1);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -484,6 +547,79 @@ test('getPath() — file node returns correct path when fileVisible: true', t =>
   t.is(absolute, resolve(tmpRoot, 'README.md'));
 });
 
+test('getPath() — all siblings return correct distinct paths', t => {
+  // Verifies that every sibling, not just the first, resolves its path correctly
+  const root       = new PathTreeify({ base: tmpRoot }).build();
+  const src        = root.children.find(n => n.value === 'src');
+  const components = src.children.find(n => n.value === 'components');
+  const hooks      = src.children.find(n => n.value === 'hooks');
+  const utils      = src.children.find(n => n.value === 'utils');
+  t.is(components.getPath().relative, `src${sep}components`);
+  t.is(hooks.getPath().relative,      `src${sep}hooks`);
+  t.is(utils.getPath().relative,      `src${sep}utils`);
+});
+
+test('getPath() — node from buildBy returns same path as from build()', t => {
+  const pt     = new PathTreeify({ base: tmpRoot });
+  const viaAll = pt.build().children.find(n => n.value === 'src');
+  const viaBy  = pt.buildBy(['src']).children.find(n => n.value === 'src');
+  t.deepEqual(viaAll.getPath(), viaBy.getPath());
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PathTreeNode.getPath() — usePathCache: true
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('usePathCache: true — getPath() returns correct paths', t => {
+  const root = new PathTreeify({ base: tmpRoot, usePathCache: true }).build();
+  const src  = root.children.find(n => n.value === 'src');
+  const { relative, absolute } = src.getPath();
+  t.is(relative, 'src');
+  t.is(absolute, resolve(tmpRoot, 'src'));
+});
+
+test('usePathCache: true — getPath() returns same object reference on repeated calls', t => {
+  const root   = new PathTreeify({ base: tmpRoot, usePathCache: true }).build();
+  const src    = root.children.find(n => n.value === 'src');
+  const first  = src.getPath();
+  const second = src.getPath();
+  // Same object reference because the result is cached after the first call
+  t.is(first, second);
+});
+
+test('usePathCache: false — getPath() returns different object references each call', t => {
+  const root   = new PathTreeify({ base: tmpRoot, usePathCache: false }).build();
+  const src    = root.children.find(n => n.value === 'src');
+  const first  = src.getPath();
+  const second = src.getPath();
+  // No caching — each call allocates a new result object
+  t.not(first, second);
+});
+
+test('usePathCache: true — nested node returns correct path', t => {
+  const root       = new PathTreeify({ base: tmpRoot, usePathCache: true }).build();
+  const src        = root.children.find(n => n.value === 'src');
+  const components = src.children.find(n => n.value === 'components');
+  const { relative, absolute } = components.getPath();
+  t.is(relative, `src${sep}components`);
+  t.is(absolute, resolve(tmpRoot, 'src', 'components'));
+});
+
+test('usePathCache: true — root node returns empty relative', t => {
+  const root = new PathTreeify({ base: tmpRoot, usePathCache: true }).build();
+  const { relative, absolute } = root.getPath();
+  t.is(relative, '');
+  t.is(absolute, resolve(tmpRoot, ''));
+});
+
+test('usePathCache: true — produces same tree structure as without cache', t => {
+  const pt       = new PathTreeify({ base: tmpRoot });
+  const ptCached = new PathTreeify({ base: tmpRoot, usePathCache: true });
+  t.deepEqual(
+    pt.build().children.map(n => n.value).sort(),
+    ptCached.build().children.map(n => n.value).sort()
+  );
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Edge cases
