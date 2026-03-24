@@ -308,8 +308,8 @@ export class PathTreeify {
    */
   buildBy(argv: any): PathTreeNode {
     if (Array.isArray(argv)) {
-      this.checkRelativePaths(argv);
       const segments = this.formatSegments(argv);
+      this.checkRelativePaths(segments);
       return this.buildBySegments(segments);
     }
 
