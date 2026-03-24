@@ -58,6 +58,7 @@ export enum PathTreeNodeKind {
  * Consumers receive this type; the internal implementation class is not exported.
  */
 export interface PathTreeNode {
+  depth: number;
   /** Reference to the parent node; null for the root node */
   parent: PathTreeNode | null;
   /** The entry name of this node (not a full path) */
@@ -179,6 +180,7 @@ export class PathTreeify {
     node.value = '';
     node.children = [];
     node.type = PathTreeNodeKind.Unknown;
+    node.depth = -1;
     return node;
   }
 
@@ -201,6 +203,7 @@ export class PathTreeify {
       }
 
       const node = this.initNode();
+      node.depth = parent.depth + 1;
       node.value = name;
       node.parent = parent;
       children.push(node);
@@ -271,19 +274,20 @@ export class PathTreeify {
   /**
    * Builds a subtree containing only the entries identified by {@link segments}.
    * Paths are normalised via {@link formatSegments} and validated before use.
-   * @param segments - Relative paths to include as top-level nodes
+   * @param segments - Relative paths to include as top-depth nodes
    */
   private buildBySegments(segments: string[]): PathTreeNode {
     const root = this.initNode();
+    root.depth = 0;
     root.children = this.buildChildren(this.base, root, segments);
     return root;
   }
 
   /**
-   * Builds a subtree from top-level entries whose names satisfy {@link filter}.
-   * Note: this predicate only affects top-level selection, not recursive traversal.
+   * Builds a subtree from top-depth entries whose names satisfy {@link filter}.
+   * Note: this predicate only affects top-depth selection, not recursive traversal.
    * For recursive filtering use the `filter` constructor option.
-   * @param filter - Predicate applied to each top-level entry name
+   * @param filter - Predicate applied to each top-depth entry name
    */
   private buildByFilter(filter: (segment: string) => boolean): PathTreeNode {
     const segments = this.getAllEntriesUnderBase();
@@ -292,7 +296,7 @@ export class PathTreeify {
 
   /** Overload: build the tree from an explicit list of relative path segments */
   buildBy(segments: string[]): PathTreeNode;
-  /** Overload: build the tree from a predicate applied to top-level entry names */
+  /** Overload: build the tree from a predicate applied to top-depth entry names */
   buildBy(filter: (segment: string) => boolean): PathTreeNode;
   /**
    * Builds a subtree from either an array of path segments or a filter function.
