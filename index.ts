@@ -224,10 +224,6 @@ export class PathTreeify {
    * @param relativeSegments - Relative path strings to validate
    */
   private checkRelativePaths(relativeSegments: string[]): void {
-    if (!Array.isArray(relativeSegments)) {
-      throw new Error(`Expected array, got ${typeof relativeSegments}`);
-    }
-
     for (let i = 0; i < relativeSegments.length; i++) {
       const it = relativeSegments[i];
 
@@ -279,11 +275,7 @@ export class PathTreeify {
    */
   private buildBySegments(segments: string[]): PathTreeNode {
     const root = this.initNode();
-    const segmentArr = this.formatSegments(segments);
-
-    this.checkRelativePaths(segmentArr);
-    root.children = this.buildChildren(this.base, root, segmentArr);
-
+    root.children = this.buildChildren(this.base, root, segments);
     return root;
   }
 
@@ -308,7 +300,9 @@ export class PathTreeify {
    */
   buildBy(argv: any): PathTreeNode {
     if (Array.isArray(argv)) {
-      return this.buildBySegments(argv);
+      this.checkRelativePaths(argv);
+      const segments = this.formatSegments(argv);
+      return this.buildBySegments(segments);
     }
 
     if (typeof argv === 'function') {
