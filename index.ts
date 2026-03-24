@@ -12,6 +12,8 @@ interface PathTreeifyProps {
   filter?: FilterFunction;
   /** When true, files are included as leaf nodes alongside directories. Defaults to false */
   fileVisible?: boolean;
+
+  usePathCache?: boolean;
 }
 
 /** Utility class for validating file system paths */
@@ -82,10 +84,14 @@ export interface PathTreeNode {
  * so that `getPath()` can resolve absolute paths without each node holding a redundant copy.
  */
 class PathTreeNodeShared {
-  base: string;
+  private base: string;
+  private usePathCache: boolean = false;
 
-  constructor(props: { base: string }) {
+  constructor(props: { base: string, usePathCache?: boolean }) {
     this.base = props.base;
+    if (typeof props.usePathCache === 'boolean') {
+      this.usePathCache = props.usePathCache;
+    }
   }
 
   /**
@@ -100,11 +106,25 @@ class PathTreeNodeShared {
    *          `absolute` — fully resolved path on disk
    */
   getPath() {
-    const current = this as any;
-    const { parentRelative } = current.parent.children[0];
-    const relative = join(parentRelative, current.value);
+    let self = this as any;
+    const getPathForce = () => {
+      let relative = '';
+      let current: PathTreeNode = this as any;
+      while (current.parent) {
+        relative = relative ? `${current.value}${sep}${relative}` : current.value;
+        current = current.parent;
+      }
+      return { relative, absolute: resolve(self.base, relative) };
+    };
 
-    return { relative, absolute: resolve(current.base, relative) };
+    if (!self.usePathCache) {
+      return getPathForce();
+    }
+
+    if (!self._pathCache) {
+      self._pathCache = getPathForce();
+    }
+    return self._pathCache;
   }
 }
 
@@ -126,7 +146,9 @@ export class PathTreeify {
   /** When true, files are included as leaf nodes during traversal. Defaults to false */
   private fileVisible = false;
 
-  constructor({ filter, base, fileVisible }: Partial<PathTreeifyProps>) {
+  constructor(props: Partial<PathTreeifyProps>) {
+    const { filter, base, fileVisible, usePathCache } = props;
+
     if (typeof fileVisible === 'boolean' && fileVisible) {
       this.fileVisible = fileVisible;
     }
@@ -145,7 +167,7 @@ export class PathTreeify {
     }
 
     this.base = base;
-    this.pathTreeNodeShared = new PathTreeNodeShared({ base });
+    this.pathTreeNodeShared = new PathTreeNodeShared({ base, usePathCache });
   }
 
   /**
@@ -181,7 +203,8 @@ export class PathTreeify {
    * `depth` are initialised to `-1` and must be set by the caller.
    */
   private initNode(): PathTreeNode {
-    const node: PathTreeNode = Object.create(this.pathTreeNodeShared);
+    const cache = Object.create(this.pathTreeNodeShared);
+    const node = Object.create(cache);
     node.parent = null;
     node.value = '';
     node.children = [];
@@ -208,6 +231,7 @@ export class PathTreeify {
   private buildChildren(dirPath: string, parent: PathTreeNode, segments?: string[]): PathTreeNode[] {
     const children: PathTreeNode[] = [];
     const names = segments || readdirSync(dirPath);
+    const depth = parent.depth + 1;
 
     for (const name of names) {
       const subPath = join(dirPath, name);
@@ -217,7 +241,7 @@ export class PathTreeify {
       }
 
       const node = this.initNode();
-      node.depth = parent.depth + 1;
+      node.depth = depth;
       node.value = name;
       node.parent = parent;
       children.push(node);
@@ -229,16 +253,6 @@ export class PathTreeify {
 
       node.type = PathTreeNodeKind.Dir;
       node.children = this.buildChildren(subPath, node);
-    }
-
-    if (children.length > 0) {
-      // Inject parentRelative onto an intermediate prototype shared by children[0].
-      // All siblings read parentRelative through children[0]'s prototype chain,
-      // so the value is stored exactly once per sibling group rather than per node.
-      let prototype = Object.getPrototypeOf(children[0]);
-      prototype = Object.create(prototype);
-      prototype.parentRelative = dirPath.replace(`${this.base}${sep}`, '');
-      Object.setPrototypeOf(children[0], prototype);
     }
 
     return children;
