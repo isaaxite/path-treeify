@@ -58,8 +58,6 @@ export enum PathTreeNodeKind {
  * Consumers receive this type; the internal implementation class is not exported.
  */
 export interface PathTreeNode {
-  /** Zero-based position of this node among its siblings */
-  idx: number;
   /** Distance from the root node; root itself is 0, its direct children are 1, and so on */
   depth: number;
   /** Reference to the parent node; null for the root node */
@@ -180,7 +178,7 @@ export class PathTreeify {
    * Creates a new unattached {@link PathTreeNode}.
    * The node's prototype is set to {@link pathTreeNodeShared} so that `base` and
    * `getPath` are inherited without being stored on each instance individually.
-   * `idx` and `depth` are initialised to `-1` and must be set by the caller.
+   * `depth` are initialised to `-1` and must be set by the caller.
    */
   private initNode(): PathTreeNode {
     const node: PathTreeNode = Object.create(this.pathTreeNodeShared);
@@ -188,7 +186,6 @@ export class PathTreeify {
     node.value = '';
     node.children = [];
     node.type = PathTreeNodeKind.Unknown;
-    node.idx = -1;
     node.depth = -1;
     return node;
   }
@@ -212,7 +209,6 @@ export class PathTreeify {
     const children: PathTreeNode[] = [];
     const names = segments || readdirSync(dirPath);
 
-    let idx = 0;
     for (const name of names) {
       const subPath = join(dirPath, name);
 
@@ -221,7 +217,6 @@ export class PathTreeify {
       }
 
       const node = this.initNode();
-      node.idx = idx++;
       node.depth = parent.depth + 1;
       node.value = name;
       node.parent = parent;
@@ -236,7 +231,7 @@ export class PathTreeify {
       node.children = this.buildChildren(subPath, node);
     }
 
-    if (idx > 0) {
+    if (children.length > 0) {
       // Inject parentRelative onto an intermediate prototype shared by children[0].
       // All siblings read parentRelative through children[0]'s prototype chain,
       // so the value is stored exactly once per sibling group rather than per node.
