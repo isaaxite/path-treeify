@@ -24,6 +24,19 @@ const ptf2 = new PathTreeify({
   filter: ({ name }) => !name.startsWith('.'),
 });
 
-const tree21 = ptf2.build();
+const tree2 = ptf2.build();
+const path21 = tree2.children[0].children[1].getPath();
+const path22 = tree2.children[0].children[1].getPath();
+const path23 = tree2.getPath();
+
+const ptf3 = new PathTreeify({
+  base: join(process.cwd(), 'node_modules'),
+  filter: ({ name }) => !name.startsWith('.'),
+  usePathCache: true,
+});
+const tree3 = ptf3.build();
+const path31 = tree3.children[0].children[1].getPath();
+const path32 = tree3.children[0].children[1].getPath();
+const path33 = tree3.getPath();
 
 process.exit(0);
