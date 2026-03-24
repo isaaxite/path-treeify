@@ -48,10 +48,12 @@
 - 🔗 每个节点携带 `parent` 循环引用，支持向上遍历
 - 📍 每个节点自带 `getPath()` 方法，可直接获取自身路径
 - 🏷️ 每个节点有 `type` 字段 — `PathTreeNodeKind.Dir` 或 `PathTreeNodeKind.File`
+- 📏 每个节点有 `depth` 字段，表示距根节点的层级深度
 - 👁️ `fileVisible` 选项可将文件作为叶节点纳入树中
 - 🔍 可选 `filter` 回调，作用于**所有深度**，包括顶层条目
 - ⚡ `build()` 无需传参，自动扫描整个 `base` 目录
 - 🎛️ `buildBy()` 支持传入路径段数组或顶层过滤函数两种形式
+- 🗃️ `usePathCache` 选项可对每个节点的 `getPath()` 结果进行缓存，适合重复访问场景
 - 📦 同时提供 ESM（`index.mjs`）与 CJS（`index.cjs`），附带完整 TypeScript 类型声明
 - 🚫 零运行时依赖
 
@@ -91,12 +93,12 @@ const treeifyWithFiles = new PathTreeify({
 });
 const fullTree = treeifyWithFiles.build();
 
-// 判断节点类型
+// 判断节点类型与层级深度
 for (const child of tree.children) {
   if (child.type === PathTreeNodeKind.Dir) {
-    console.log('目录:', child.value);
+    console.log(`目录 (depth ${child.depth}):`, child.value);
   } else if (child.type === PathTreeNodeKind.File) {
-    console.log('文件:', child.value);
+    console.log(`文件 (depth ${child.depth}):`, child.value);
   }
 }
 ```
@@ -109,11 +111,12 @@ for (const child of tree.children) {
 
 创建一个新实例。
 
-| 选项          | 类型                          | 是否必填 | 说明                                                    |
-|---------------|-------------------------------|----------|---------------------------------------------------------|
-| `base`        | `string`                      | ✅        | 扫描的根目录绝对路径                                     |
-| `filter`      | `FilterFunction`（见下方）    | ❌        | 作用于**所有深度**，包括 `base` 的直接子条目             |
-| `fileVisible` | `boolean`                     | ❌        | 为 `true` 时将文件纳入树中作为叶节点，默认 `false`       |
+| 选项           | 类型                          | 是否必填 | 说明                                                                     |
+|----------------|-------------------------------|----------|--------------------------------------------------------------------------|
+| `base`         | `string`                      | ✅        | 扫描的根目录绝对路径                                                      |
+| `filter`       | `FilterFunction`（见下方）    | ❌        | 作用于**所有深度**，包括 `base` 的直接子条目                              |
+| `fileVisible`  | `boolean`                     | ❌        | 为 `true` 时将文件纳入树中作为叶节点，默认 `false`                        |
+| `usePathCache` | `boolean`                     | ❌        | 为 `true` 时，`getPath()` 的结果在首次调用后缓存于节点上，后续直接返回   |
 
 `base` 必须存在且为目录，否则构造函数会抛出错误。
 
@@ -187,6 +190,7 @@ const tree = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith
 
 ```ts
 interface PathTreeNode {
+  depth:    number;               // 距根节点的层级深度；根节点为 0，其直接子节点为 1，以此类推
   parent:   PathTreeNode | null;  // 仅合成根节点为 null
   value:    string;               // 当前节点的条目名
   children: PathTreeNode[];       // 文件节点为空数组
@@ -195,6 +199,8 @@ interface PathTreeNode {
   getPath(): { relative: string; absolute: string };
 }
 ```
+
+当 `PathTreeify` 实例设置了 `usePathCache: true` 时，`getPath()` 的结果会在首次调用后缓存于节点上，后续调用直接返回同一对象引用，无需重新回溯父链。
 
 > ⚠️ **循环引用** — `parent` 指向树的上层节点。若需要序列化结果，请使用 `JSON.stringify` 的替换函数，或借助 `flatted` 等库处理循环引用。
 
@@ -263,12 +269,28 @@ const tree = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith
 function printPaths(node) {
   for (const child of node.children) {
     const { absolute } = child.getPath();
-    console.log(`[${child.type}] ${absolute}`);
+    console.log(`[${child.type}] depth=${child.depth} ${absolute}`);
     printPaths(child);
   }
 }
 
 printPaths(tree);
+```
+
+### 对 `getPath()` 结果启用缓存
+
+```ts
+const treeify = new PathTreeify({
+  base: '/your/project',
+  usePathCache: true,
+});
+const tree = treeify.build();
+
+// 首次调用回溯父链并缓存结果
+const pathA = tree.children[0].getPath();
+// 后续调用直接返回缓存对象
+const pathB = tree.children[0].getPath();
+console.log(pathA === pathB); // true
 ```
 
 ### CommonJS 用法

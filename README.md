@@ -51,10 +51,12 @@
 - 🔗 Each node carries a `parent` circular reference for upward traversal
 - 📍 Each node exposes a `getPath()` method to retrieve its own paths directly
 - 🏷️ Each node has a `type` field — `PathTreeNodeKind.Dir` or `PathTreeNodeKind.File`
+- 📏 Each node has a `depth` field indicating its distance from the root
 - 👁️ `fileVisible` option includes files as leaf nodes alongside directories
 - 🔍 Optional `filter` callback applied at **every depth**, including top-level entries
 - ⚡ `build()` scans the entire `base` directory with zero configuration
 - 🎛️ `buildBy()` accepts either a path segment array or a top-level filter function
+- 🗃️ `usePathCache` option caches `getPath()` results per node for repeated access
 - 📦 Ships as both ESM (`index.mjs`) and CJS (`index.cjs`) with full TypeScript types
 - 🚫 Zero runtime dependencies
 
@@ -94,12 +96,12 @@ const treeifyWithFiles = new PathTreeify({
 });
 const fullTree = treeifyWithFiles.build();
 
-// Check node type
+// Check node type and depth
 for (const child of tree.children) {
   if (child.type === PathTreeNodeKind.Dir) {
-    console.log('dir:', child.value);
+    console.log(`dir (depth ${child.depth}):`, child.value);
   } else if (child.type === PathTreeNodeKind.File) {
-    console.log('file:', child.value);
+    console.log(`file (depth ${child.depth}):`, child.value);
   }
 }
 ```
@@ -112,11 +114,12 @@ for (const child of tree.children) {
 
 Creates a new instance.
 
-| Option        | Type                         | Required | Description                                                              |
-|---------------|------------------------------|----------|--------------------------------------------------------------------------|
-| `base`        | `string`                     | ✅        | Absolute path to the root directory to scan from                        |
-| `filter`      | `FilterFunction` (see below) | ❌        | Applied at **every depth** — top-level entries included                 |
-| `fileVisible` | `boolean`                    | ❌        | When `true`, files are included as leaf nodes. Defaults to `false`      |
+| Option         | Type                         | Required | Description                                                                         |
+|----------------|------------------------------|----------|-------------------------------------------------------------------------------------|
+| `base`         | `string`                     | ✅        | Absolute path to the root directory to scan from                                   |
+| `filter`       | `FilterFunction` (see below) | ❌        | Applied at **every depth** — top-level entries included                            |
+| `fileVisible`  | `boolean`                    | ❌        | When `true`, files are included as leaf nodes. Defaults to `false`                 |
+| `usePathCache` | `boolean`                    | ❌        | When `true`, `getPath()` results are cached on each node after the first call      |
 
 `base` must exist and be a directory, otherwise the constructor throws.
 
@@ -190,6 +193,7 @@ const tree = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith
 
 ```ts
 interface PathTreeNode {
+  depth:    number;               // distance from root; root is 0, its children are 1, etc.
   parent:   PathTreeNode | null;  // null only on the synthetic root
   value:    string;               // entry name for this node
   children: PathTreeNode[];       // empty for file nodes
@@ -198,6 +202,8 @@ interface PathTreeNode {
   getPath(): { relative: string; absolute: string };
 }
 ```
+
+When `usePathCache: true` is set on the `PathTreeify` instance, the result of `getPath()` is cached on the node after the first call — subsequent calls return the same object reference without recomputing the parent chain.
 
 > ⚠️ **Circular references** — `parent` points back up the tree. Use `JSON.stringify` replacers or a library like `flatted` if you need to serialize the result.
 
@@ -266,12 +272,28 @@ const tree = treeify.buildBy(name => name !== 'node_modules' && !name.startsWith
 function printPaths(node) {
   for (const child of node.children) {
     const { absolute } = child.getPath();
-    console.log(`[${child.type}] ${absolute}`);
+    console.log(`[${child.type}] depth=${child.depth} ${absolute}`);
     printPaths(child);
   }
 }
 
 printPaths(tree);
+```
+
+### Cache `getPath()` results for repeated traversal
+
+```ts
+const treeify = new PathTreeify({
+  base: '/your/project',
+  usePathCache: true,
+});
+const tree = treeify.build();
+
+// First call walks the parent chain and caches the result
+const pathA = tree.children[0].getPath();
+// Subsequent calls return the cached object directly
+const pathB = tree.children[0].getPath();
+console.log(pathA === pathB); // true
 ```
 
 ### CommonJS usage
