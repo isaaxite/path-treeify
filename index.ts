@@ -92,15 +92,11 @@ class PathTreeNodeShared {
    * @returns The relative path string using the platform separator
    */
   getPath() {
-    let relative = '';
-    let current: PathTreeNode = this as any;
-    while (current.parent) {
-      relative = relative
-        ? `${current.value}${sep}${relative}`
-        : current.value;
-      current = current.parent;
-    }
-    return { relative, absolute: resolve(this.base, relative) };
+    const current = this as any;
+    const { parentRelative } = current.parent.children[0];
+    const relative = join(parentRelative, current.value);
+
+    return { relative, absolute: resolve(current.base, relative) };
   }
 }
 
@@ -219,6 +215,13 @@ export class PathTreeify {
 
       node.type = PathTreeNodeKind.Dir;
       node.children = this.buildChildren(subPath, node);
+    }
+
+    if (idx > 0) {
+      let prototype = Object.getPrototypeOf(children[0]);
+      prototype = Object.create(prototype);
+      prototype.parentRelative = dirPath.replace(`${this.base}${sep}`, '');
+      Object.setPrototypeOf(children[0], prototype);
     }
 
     return children;
