@@ -58,6 +58,7 @@ export enum PathTreeNodeKind {
  * Consumers receive this type; the internal implementation class is not exported.
  */
 export interface PathTreeNode {
+  idx: number;
   depth: number;
   /** Reference to the parent node; null for the root node */
   parent: PathTreeNode | null;
@@ -180,6 +181,7 @@ export class PathTreeify {
     node.value = '';
     node.children = [];
     node.type = PathTreeNodeKind.Unknown;
+    node.idx = -1;
     node.depth = -1;
     return node;
   }
@@ -195,6 +197,7 @@ export class PathTreeify {
     const children: PathTreeNode[] = [];
     const names = segments || readdirSync(dirPath);
 
+    let idx = 0;
     for (const name of names) {
       const subPath = join(dirPath, name);
 
@@ -203,6 +206,7 @@ export class PathTreeify {
       }
 
       const node = this.initNode();
+      node.idx = idx++;
       node.depth = parent.depth + 1;
       node.value = name;
       node.parent = parent;
