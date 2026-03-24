@@ -53,28 +53,36 @@ export enum PathTreeNodeKind {
   Unknown = 'unknown',
 }
 
+/**
+ * Public interface for a node in the path tree.
+ * Consumers receive this type; the internal implementation class is not exported.
+ */
 export interface PathTreeNode {
+  /** Reference to the parent node; null for the root node */
   parent: PathTreeNode | null;
+  /** The entry name of this node (not a full path) */
   value: string;
+  /** Child nodes; non-empty only for directory nodes */
   children: PathTreeNode[];
+  /** Whether this node is a directory, a file, or not yet resolved */
   type: PathTreeNodeKind;
+  /**
+   * Walks up the parent chain to compute this node's paths.
+   * @returns `relative` — path from the tree root; `absolute` — fully resolved path on disk
+   */
   getPath(): { relative: string; absolute: string };
 }
 
-/** Represents a single entry (directory or file) in the path tree */
-class PathTreeNodeImpl implements PathTreeNode {
-  private base: string;
-  /** Reference to the parent node; null for the root node */
-  public parent: PathTreeNode | null = null;
-  /** The entry name of this node (not a full path) */
-  public value: string = '';
-  /** Child nodes; non-empty only for directory nodes */
-  public children: PathTreeNode[] = [];
-  /** Whether this node is a directory, a file, or not yet resolved */
-  public type: PathTreeNodeKind = PathTreeNodeKind.Unknown;
+/**
+ * Shared prototype object for all nodes produced by a single {@link PathTreeify} instance.
+ * Stores `base` once on the prototype rather than duplicating it across every node instance,
+ * so that `getPath()` can resolve absolute paths without each node holding a redundant copy.
+ */
+class PathTreeNodeShared {
+  base: string;
 
-  constructor(base: string) {
-    this.base = base;
+  constructor(props: { base: string }) {
+    this.base = props.base;
   }
 
   /**
@@ -83,7 +91,7 @@ class PathTreeNodeImpl implements PathTreeNode {
    */
   getPath() {
     let relative = '';
-    let current: PathTreeNode = this;
+    let current: PathTreeNode = this as any;
     while (current.parent) {
       relative = relative
         ? `${current.value}${sep}${relative}`
@@ -99,28 +107,18 @@ export class PathTreeify {
   /** The root directory to scan */
   private base: string;
   /**
+   * Shared prototype instance for nodes produced by this builder.
+   * All nodes created via {@link initNode} inherit `base` and `getPath` from this object,
+   * avoiding per-node storage of the base path string.
+   */
+  private pathTreeNodeShared: PathTreeNodeShared;
+  /**
    * Optional user-supplied filter. When set, every entry must pass this predicate
    * in addition to the built-in visibility check.
    */
   private userFilter?: FilterFunction;
   /** When true, files are included as leaf nodes during traversal. Defaults to false */
   private fileVisible = false;
-
-  /**
-   * Determines whether a given entry should be included in the tree.
-   * - If {@link fileVisible} is false, non-directory entries are always excluded.
-   * - If a {@link userFilter} is set, the entry must also satisfy it.
-   * @param absPath - Absolute path of the entry to test
-   * @param name - Entry name (filename or directory name)
-   */
-  private applyFilter(absPath: string, name: string): boolean {
-    if (!this.fileVisible && !PathValidator.isDirectory(absPath)) {
-      return false;
-    }
-    return this.userFilter
-      ? this.userFilter({ name, dirPath: dirname(absPath) })
-      : true;
-  }
 
   constructor({ filter, base, fileVisible }: Partial<PathTreeifyProps>) {
     if (typeof fileVisible === 'boolean' && fileVisible) {
@@ -141,6 +139,23 @@ export class PathTreeify {
     }
 
     this.base = base;
+    this.pathTreeNodeShared = new PathTreeNodeShared({ base });
+  }
+
+  /**
+   * Determines whether a given entry should be included in the tree.
+   * - If {@link fileVisible} is false, non-directory entries are always excluded.
+   * - If a {@link userFilter} is set, the entry must also satisfy it.
+   * @param absPath - Absolute path of the entry to test
+   * @param name - Entry name (filename or directory name)
+   */
+  private applyFilter(absPath: string, name: string): boolean {
+    if (!this.fileVisible && !PathValidator.isDirectory(absPath)) {
+      return false;
+    }
+    return this.userFilter
+      ? this.userFilter({ name, dirPath: dirname(absPath) })
+      : true;
   }
 
   /**
@@ -153,9 +168,18 @@ export class PathTreeify {
     }
   }
 
-  /** Creates a new unattached {@link PathTreeNode} */
+  /**
+   * Creates a new unattached {@link PathTreeNode}.
+   * The node's prototype is set to {@link pathTreeNodeShared} so that `base` and
+   * `getPath` are inherited without being stored on each instance individually.
+   */
   private initNode(): PathTreeNode {
-    return new PathTreeNodeImpl(this.base);
+    const node: PathTreeNode = Object.create(this.pathTreeNodeShared);
+    node.parent = null;
+    node.value = '';
+    node.children = [];
+    node.type = PathTreeNodeKind.Unknown;
+    return node;
   }
 
   /**
