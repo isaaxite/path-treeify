@@ -1,15 +1,16 @@
 import test from 'ava';
 import { mkdirSync, rmSync, existsSync, writeFileSync } from 'fs';
 import { join, resolve, sep } from 'path';
-import { PathTreeify, PathTreeNode, PathTreeNodeType } from '../dist/index.mjs';
+import { PathTreeify, PathTreeNodeKind } from '../dist/index.mjs';
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Fixture helpers
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Creates a temporary directory/file tree for testing.
- * Pass null as the value to create a file; pass an object to create a directory.
+ * Declaratively create a directory/file tree under `root`.
+ * - object value  → directory (recurse)
+ * - null value    → empty file
  */
 function createTempTree(structure, root) {
   mkdirSync(root, { recursive: true });
@@ -19,7 +20,7 @@ function createTempTree(structure, root) {
       const fullPath = join(base, name);
       if (children === null) {
         writeFileSync(fullPath, '');
-      } else if (typeof children === 'object') {
+      } else {
         mkdirSync(fullPath, { recursive: true });
         create(fullPath, children);
       }
@@ -30,6 +31,7 @@ function createTempTree(structure, root) {
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
+/** Shared fixture used by most tests */
 let tmpRoot;
 let cleanup;
 
@@ -38,17 +40,13 @@ test.before(() => {
   ({ cleanup } = createTempTree(
     {
       src: {
-        components: {},
+        components: { Button: {}, Input: {} },
         utils: {},
         hooks: {},
       },
       public: {},
-      dist: {
-        assets: {},
-      },
-      node_modules: {
-        '.cache': {},
-      },
+      dist: { assets: {} },
+      node_modules: { '.cache': {} },
       'README.md': null,
       'logo.png': null,
     },
@@ -58,17 +56,32 @@ test.before(() => {
 
 test.after.always(() => cleanup?.());
 
-// ─────────────────────────────────────────────
-// Constructor — base validation
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PathTreeNodeKind enum
+// ─────────────────────────────────────────────────────────────────────────────
 
-test('constructor — throws when base is missing', t => {
+test('PathTreeNodeKind — has correct string values', t => {
+  t.is(PathTreeNodeKind.Dir,     'dir');
+  t.is(PathTreeNodeKind.File,    'file');
+  t.is(PathTreeNodeKind.Unknown, 'unknown');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Constructor — base validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('constructor — throws when base is omitted', t => {
   const err = t.throws(() => new PathTreeify({}));
   t.regex(err.message, /not a valid path/i);
 });
 
-test('constructor — throws when base path does not exist', t => {
-  const err = t.throws(() => new PathTreeify({ base: '/this/does/not/exist' }));
+test('constructor — throws when base is an empty string', t => {
+  const err = t.throws(() => new PathTreeify({ base: '' }));
+  t.regex(err.message, /not a valid path/i);
+});
+
+test('constructor — throws when base does not exist', t => {
+  const err = t.throws(() => new PathTreeify({ base: '/no/such/path' }));
   t.regex(err.message, /not a valid path/i);
 });
 
@@ -81,103 +94,84 @@ test('constructor — succeeds with a valid directory', t => {
   t.notThrows(() => new PathTreeify({ base: tmpRoot }));
 });
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Constructor — filter validation
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
-test('constructor — throws when filter is not a function', t => {
+test('constructor — throws when filter is a string', t => {
   // @ts-ignore intentional bad input
   const err = t.throws(() => new PathTreeify({ base: tmpRoot, filter: 'bad' }));
   t.regex(err.message, /filter must be a function/i);
 });
 
-test('constructor — accepts a zero-parameter arrow function as filter', t => {
-  // Old code rejected () => true (filter.length !== 1); new code accepts it
+test('constructor — throws when filter is a number', t => {
+  // @ts-ignore
+  const err = t.throws(() => new PathTreeify({ base: tmpRoot, filter: 42 }));
+  t.regex(err.message, /filter must be a function/i);
+});
+
+test('constructor — throws when filter is null', t => {
+  // @ts-ignore
+  const err = t.throws(() => new PathTreeify({ base: tmpRoot, filter: null }));
+  t.regex(err.message, /filter must be a function/i);
+});
+
+test('constructor — accepts zero-parameter filter', t => {
   t.notThrows(() => new PathTreeify({ base: tmpRoot, filter: () => true }));
 });
 
-test('constructor — accepts a valid one-parameter filter', t => {
-  t.notThrows(() => new PathTreeify({ base: tmpRoot, filter: (_opts) => true }));
+test('constructor — accepts one-parameter filter', t => {
+  t.notThrows(() => new PathTreeify({ base: tmpRoot, filter: (_) => true }));
 });
 
-test('constructor — accepts filter that returns false', t => {
+test('constructor — accepts filter that always returns false', t => {
   t.notThrows(() => new PathTreeify({ base: tmpRoot, filter: () => false }));
 });
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Constructor — fileVisible option
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 test('constructor — accepts fileVisible: true', t => {
   t.notThrows(() => new PathTreeify({ base: tmpRoot, fileVisible: true }));
 });
 
-test('constructor — accepts fileVisible: false (explicit)', t => {
+test('constructor — accepts fileVisible: false', t => {
   t.notThrows(() => new PathTreeify({ base: tmpRoot, fileVisible: false }));
 });
 
-// ─────────────────────────────────────────────
-// PathTreeNodeType enum
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// build() — root node shape
+// ─────────────────────────────────────────────────────────────────────────────
 
-test('PathTreeNodeType — enum values are as expected', t => {
-  t.is(PathTreeNodeType.Dir, 'dir');
-  t.is(PathTreeNodeType.File, 'file');
-  t.is(PathTreeNodeType.Unknown, 'unknown');
+test('build() — root parent is null', t => {
+  t.is(new PathTreeify({ base: tmpRoot }).build().parent, null);
 });
 
-// ─────────────────────────────────────────────
-// PathTreeNode — default state
-// ─────────────────────────────────────────────
-
-test('PathTreeNode — default type is Unknown', t => {
-  const node = new PathTreeNode();
-  t.is(node.type, PathTreeNodeType.Unknown);
-  t.is(node.parent, null);
-  t.is(node.value, '');
-  t.deepEqual(node.children, []);
+test('build() — root value is empty string', t => {
+  t.is(new PathTreeify({ base: tmpRoot }).build().value, '');
 });
 
-test('PathTreeNode.getPath() — returns empty string for root node', t => {
-  const node = new PathTreeNode();
-  t.is(node.getPath(), '');
+test('build() — root type is Unknown', t => {
+  t.is(new PathTreeify({ base: tmpRoot }).build().type, PathTreeNodeKind.Unknown);
 });
 
-test('PathTreeNode.getPath() — returns value for single-level node', t => {
-  const root = new PathTreeNode();
-  const child = new PathTreeNode();
-  child.value = 'src';
-  child.parent = root;
-  t.is(child.getPath(), 'src');
+test('build() — root children is an array', t => {
+  t.true(Array.isArray(new PathTreeify({ base: tmpRoot }).build().children));
 });
 
-test('PathTreeNode.getPath() — returns sep-joined path for nested node', t => {
-  const root = new PathTreeNode();
-  const child = new PathTreeNode();
-  child.value = 'src';
-  child.parent = root;
-  const grandchild = new PathTreeNode();
-  grandchild.value = 'components';
-  grandchild.parent = child;
-  t.is(grandchild.getPath(), `src${sep}components`);
-});
+// ─────────────────────────────────────────────────────────────────────────────
+// build() — directory-only mode (default)
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────
-// build() — structure
-// ─────────────────────────────────────────────
-
-test('build() — returns a root node with null parent', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.build();
-  t.truthy(root);
-  t.is(root.parent, null);
-});
-
-test('build() — top-level children include only directories by default', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const topNames = pt.build().children.map(n => n.value);
+test('build() — top-level files are excluded by default', t => {
+  const topNames = new PathTreeify({ base: tmpRoot }).build().children.map(n => n.value);
   t.false(topNames.includes('README.md'));
   t.false(topNames.includes('logo.png'));
+});
+
+test('build() — top-level directories are all present', t => {
+  const topNames = new PathTreeify({ base: tmpRoot }).build().children.map(n => n.value);
   t.true(topNames.includes('src'));
   t.true(topNames.includes('public'));
   t.true(topNames.includes('dist'));
@@ -185,24 +179,22 @@ test('build() — top-level children include only directories by default', t => 
 });
 
 test('build() — all top-level dir nodes have type Dir', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.build();
-  for (const child of root.children) {
-    t.is(child.type, PathTreeNodeType.Dir);
+  for (const child of new PathTreeify({ base: tmpRoot }).build().children) {
+    t.is(child.type, PathTreeNodeKind.Dir);
   }
 });
 
 test('build() — nested children are built recursively', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.build();
-  const src = root.children.find(n => n.value === 'src');
-  t.truthy(src);
+  const root = new PathTreeify({ base: tmpRoot }).build();
+  const src   = root.children.find(n => n.value === 'src');
   t.deepEqual(src.children.map(n => n.value).sort(), ['components', 'hooks', 'utils']);
+
+  const components = src.children.find(n => n.value === 'components');
+  t.deepEqual(components.children.map(n => n.value).sort(), ['Button', 'Input']);
 });
 
-test('build() — each child has correct parent back-reference', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.build();
+test('build() — each node has a correct parent back-reference', t => {
+  const root = new PathTreeify({ base: tmpRoot }).build();
   for (const child of root.children) {
     t.is(child.parent, root);
     for (const grandchild of child.children) {
@@ -211,259 +203,294 @@ test('build() — each child has correct parent back-reference', t => {
   }
 });
 
-// ─────────────────────────────────────────────
-// build() — with fileVisible
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// build() — fileVisible: true
+// ─────────────────────────────────────────────────────────────────────────────
 
-test('fileVisible: true — files appear as leaf nodes at top level', t => {
-  const pt = new PathTreeify({ base: tmpRoot, fileVisible: true });
-  const topNames = pt.build().children.map(n => n.value);
+test('fileVisible: true — files appear at top level', t => {
+  const topNames = new PathTreeify({ base: tmpRoot, fileVisible: true })
+    .build().children.map(n => n.value);
   t.true(topNames.includes('README.md'));
   t.true(topNames.includes('logo.png'));
 });
 
 test('fileVisible: true — file nodes have type File', t => {
-  const pt = new PathTreeify({ base: tmpRoot, fileVisible: true });
-  const root = pt.build();
+  const root   = new PathTreeify({ base: tmpRoot, fileVisible: true }).build();
   const readme = root.children.find(n => n.value === 'README.md');
-  t.truthy(readme);
-  t.is(readme.type, PathTreeNodeType.File);
+  t.is(readme.type, PathTreeNodeKind.File);
 });
 
 test('fileVisible: true — file nodes have no children', t => {
-  const pt = new PathTreeify({ base: tmpRoot, fileVisible: true });
-  const root = pt.build();
+  const root   = new PathTreeify({ base: tmpRoot, fileVisible: true }).build();
   const readme = root.children.find(n => n.value === 'README.md');
   t.deepEqual(readme.children, []);
 });
 
 test('fileVisible: true — directory nodes still have type Dir', t => {
-  const pt = new PathTreeify({ base: tmpRoot, fileVisible: true });
-  const root = pt.build();
-  const src = root.children.find(n => n.value === 'src');
-  t.is(src.type, PathTreeNodeType.Dir);
+  const root = new PathTreeify({ base: tmpRoot, fileVisible: true }).build();
+  const src  = root.children.find(n => n.value === 'src');
+  t.is(src.type, PathTreeNodeKind.Dir);
 });
 
-test('fileVisible: false (default) — file nodes are absent', t => {
-  const pt = new PathTreeify({ base: tmpRoot, fileVisible: false });
-  const topNames = pt.build().children.map(n => n.value);
+test('fileVisible: true — dir nodes still recurse correctly', t => {
+  const root = new PathTreeify({ base: tmpRoot, fileVisible: true }).build();
+  const src  = root.children.find(n => n.value === 'src');
+  t.true(src.children.length > 0);
+});
+
+test('fileVisible: false (explicit) — files remain excluded', t => {
+  const topNames = new PathTreeify({ base: tmpRoot, fileVisible: false })
+    .build().children.map(n => n.value);
   t.false(topNames.includes('README.md'));
 });
 
-// ─────────────────────────────────────────────
-// build() — instance-level filter
-// ─────────────────────────────────────────────
+test('fileVisible: true — mixed dir/file siblings both typed correctly', t => {
+  const mixedRoot = join('/tmp', `pt-mixed-${Date.now()}`);
+  createTempTree({ subdir: {}, 'file.txt': null }, mixedRoot);
+  try {
+    const root = new PathTreeify({ base: mixedRoot, fileVisible: true }).build();
+    t.is(root.children.find(n => n.value === 'subdir').type, PathTreeNodeKind.Dir);
+    t.is(root.children.find(n => n.value === 'file.txt').type, PathTreeNodeKind.File);
+  } finally {
+    rmSync(mixedRoot, { recursive: true, force: true });
+  }
+});
 
-test('build() — instance filter excludes matching top-level dirs', t => {
-  const pt = new PathTreeify({ base: tmpRoot, filter: ({ name }) => name !== 'node_modules' });
-  const topNames = pt.build().children.map(n => n.value);
+// ─────────────────────────────────────────────────────────────────────────────
+// build() — instance-level filter
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('build() — filter excludes at top level', t => {
+  const topNames = new PathTreeify({ base: tmpRoot, filter: ({ name }) => name !== 'node_modules' })
+    .build().children.map(n => n.value);
   t.false(topNames.includes('node_modules'));
   t.true(topNames.includes('src'));
 });
 
-test('build() — instance filter is applied recursively', t => {
-  const pt = new PathTreeify({ base: tmpRoot, filter: ({ name }) => name !== 'hooks' });
-  const root = pt.build();
-  const src = root.children.find(n => n.value === 'src');
-  const srcChildNames = src.children.map(n => n.value);
-  t.false(srcChildNames.includes('hooks'));
-  t.true(srcChildNames.includes('components'));
+test('build() — filter is applied recursively', t => {
+  const src = new PathTreeify({ base: tmpRoot, filter: ({ name }) => name !== 'hooks' })
+    .build().children.find(n => n.value === 'src');
+  t.false(src.children.map(n => n.value).includes('hooks'));
+  t.true(src.children.map(n => n.value).includes('components'));
 });
 
-test('build() — instance filter combined with fileVisible', t => {
-  const pt = new PathTreeify({
+test('build() — filter receives correct name and dirPath params', t => {
+  const calls = [];
+  new PathTreeify({
     base: tmpRoot,
-    fileVisible: true,
-    filter: ({ name }) => !name.endsWith('.png'),
-  });
-  const topNames = pt.build().children.map(n => n.value);
-  t.false(topNames.includes('logo.png'));
-  t.true(topNames.includes('README.md')); // .md is not excluded
-});
+    filter: ({ name, dirPath }) => { calls.push({ name, dirPath }); return true; },
+  }).build();
 
-// ─────────────────────────────────────────────
-// buildBy(string[])
-// ─────────────────────────────────────────────
-
-test('buildBy(string[]) — returns only requested top-level dirs', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.buildBy(['src', 'public']);
-  t.deepEqual(root.children.map(n => n.value).sort(), ['public', 'src']);
-});
-
-test('buildBy(string[]) — builds subtrees under selected dirs', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.buildBy(['src']);
-  const src = root.children.find(n => n.value === 'src');
-  t.deepEqual(src.children.map(n => n.value).sort(), ['components', 'hooks', 'utils']);
-});
-
-test('buildBy(string[]) — top-level nodes have type Dir', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.buildBy(['src', 'dist']);
-  for (const child of root.children) {
-    t.is(child.type, PathTreeNodeType.Dir);
+  // Every call must have a non-empty name and a dirPath that starts with tmpRoot
+  for (const call of calls) {
+    t.is(typeof call.name, 'string');
+    t.true(call.name.length > 0);
+    t.true(call.dirPath.startsWith(tmpRoot));
   }
 });
 
-test('buildBy(string[]) — strips leading/trailing slashes (posix style)', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.buildBy(['/src/', '/public/']);
-  const topNames = root.children.map(n => n.value).sort();
+test('build() — filter combined with fileVisible: true filters files too', t => {
+  const topNames = new PathTreeify({
+    base: tmpRoot,
+    fileVisible: true,
+    filter: ({ name }) => !name.endsWith('.png'),
+  }).build().children.map(n => n.value);
+  t.false(topNames.includes('logo.png'));
+  t.true(topNames.includes('README.md'));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildBy(string[])
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('buildBy([]) — returns only requested top-level dirs', t => {
+  const topNames = new PathTreeify({ base: tmpRoot })
+    .buildBy(['src', 'public']).children.map(n => n.value).sort();
+  t.deepEqual(topNames, ['public', 'src']);
+});
+
+test('buildBy([]) — builds full subtrees under requested dirs', t => {
+  const src = new PathTreeify({ base: tmpRoot })
+    .buildBy(['src']).children.find(n => n.value === 'src');
+  t.deepEqual(src.children.map(n => n.value).sort(), ['components', 'hooks', 'utils']);
+});
+
+test('buildBy([]) — top-level nodes have type Dir', t => {
+  for (const child of new PathTreeify({ base: tmpRoot }).buildBy(['src', 'dist']).children) {
+    t.is(child.type, PathTreeNodeKind.Dir);
+  }
+});
+
+test('buildBy([]) — parent references are correct', t => {
+  const root = new PathTreeify({ base: tmpRoot }).buildBy(['src', 'dist']);
+  for (const child of root.children) {
+    t.is(child.parent, root);
+  }
+});
+
+test('buildBy([]) — strips leading/trailing posix slashes', t => {
+  const topNames = new PathTreeify({ base: tmpRoot })
+    .buildBy(['/src/', '/public/']).children.map(n => n.value).sort();
   t.true(topNames.includes('src'));
   t.true(topNames.includes('public'));
 });
 
-test('buildBy(string[]) — strips backslashes (windows style)', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.buildBy(['\\src\\', '\\public\\']);
-  const topNames = root.children.map(n => n.value).sort();
-  t.true(topNames.includes('src'));
-  t.true(topNames.includes('public'));
-});
-
-test('buildBy(string[]) — strips mixed slashes', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.buildBy(['/src\\']);
-  t.true(root.children.map(n => n.value).includes('src'));
-});
-
-test('buildBy(string[]) — empty array produces root with no children', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  t.is(pt.buildBy([]).children.length, 0);
-});
-
-test('buildBy(string[]) — entries that reduce to empty string are ignored', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  // '///' reduces to '' after formatting and must be silently dropped
-  const root = pt.buildBy(['///', 'src']);
+test('buildBy([]) — entries that reduce to empty string are silently dropped', t => {
+  // '///' → no segments after split/filter → dropped
+  const root = new PathTreeify({ base: tmpRoot }).buildBy(['///', 'src']);
   t.deepEqual(root.children.map(n => n.value), ['src']);
 });
 
-test('buildBy(string[]) — throws when a segment does not exist', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const err = t.throws(() => pt.buildBy(['non-existent-dir']));
+test('buildBy([]) — empty array produces root with no children', t => {
+  t.is(new PathTreeify({ base: tmpRoot }).buildBy([]).children.length, 0);
+});
+
+test('buildBy([]) — throws when segment does not exist', t => {
+  const err = t.throws(() => new PathTreeify({ base: tmpRoot }).buildBy(['does-not-exist']));
   t.regex(err.message, /does not exist|not accessible/i);
 });
 
-test('buildBy(string[]) — throws when a segment points to a file (fileVisible: false)', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const err = t.throws(() => pt.buildBy(['README.md']));
+test('buildBy([]) — throws when segment is a file and fileVisible is false', t => {
+  const err = t.throws(() => new PathTreeify({ base: tmpRoot }).buildBy(['README.md']));
   t.regex(err.message, /not a directory/i);
 });
 
-test('buildBy(string[]) — accepts a file segment when fileVisible: true', t => {
+test('buildBy([]) — accepts a file segment when fileVisible: true', t => {
   const pt = new PathTreeify({ base: tmpRoot, fileVisible: true });
   t.notThrows(() => pt.buildBy(['README.md']));
-  const root = pt.buildBy(['README.md']);
-  const node = root.children.find(n => n.value === 'README.md');
-  t.is(node.type, PathTreeNodeType.File);
+  const node = pt.buildBy(['README.md']).children.find(n => n.value === 'README.md');
+  t.is(node.type, PathTreeNodeKind.File);
+  t.deepEqual(node.children, []);
 });
 
-// ─────────────────────────────────────────────
-// buildBy(filter function)
-// ─────────────────────────────────────────────
-
-test('buildBy(fn) — includes only dirs matching predicate', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.buildBy(name => name === 'src' || name === 'dist');
-  t.deepEqual(root.children.map(n => n.value).sort(), ['dist', 'src']);
+test('buildBy([]) — backslash is treated as separator by formatSegments', t => {
+  // formatSegments splits on /[/\\]/, so '\\src\\' → ['src'] → resolves correctly
+  const root = new PathTreeify({ base: tmpRoot }).buildBy(['\\src\\']);
+  t.true(root.children.map(n => n.value).includes('src'));
 });
 
-test('buildBy(fn) — predicate returning false for all produces empty root', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  t.is(pt.buildBy(() => false).children.length, 0);
+// ─────────────────────────────────────────────────────────────────────────────
+// buildBy(fn)
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('buildBy(fn) — includes only entries matching predicate', t => {
+  const topNames = new PathTreeify({ base: tmpRoot })
+    .buildBy(n => n === 'src' || n === 'dist').children.map(n => n.value).sort();
+  t.deepEqual(topNames, ['dist', 'src']);
 });
 
-test('buildBy(fn) — predicate returning true for all equals build()', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const fromBuild   = pt.build().children.map(n => n.value).sort();
-  const fromBuildBy = pt.buildBy(() => true).children.map(n => n.value).sort();
-  t.deepEqual(fromBuild, fromBuildBy);
+test('buildBy(fn) — predicate returning false for all yields empty root', t => {
+  t.is(new PathTreeify({ base: tmpRoot }).buildBy(() => false).children.length, 0);
 });
 
-test('buildBy(fn) — predicate receives the entry name as argument', t => {
+test('buildBy(fn) — predicate returning true for all matches build()', t => {
   const pt = new PathTreeify({ base: tmpRoot });
+  t.deepEqual(
+    pt.buildBy(() => true).children.map(n => n.value).sort(),
+    pt.build().children.map(n => n.value).sort()
+  );
+});
+
+test('buildBy(fn) — predicate receives entry name as string', t => {
   const seen = [];
-  pt.buildBy(name => { seen.push(name); return false; });
+  new PathTreeify({ base: tmpRoot }).buildBy(name => { seen.push(name); return false; });
+  t.true(seen.every(n => typeof n === 'string'));
   t.true(seen.includes('src'));
   t.true(seen.includes('dist'));
 });
 
-// ─────────────────────────────────────────────
-// buildBy — invalid argument
-// ─────────────────────────────────────────────
-
-test('buildBy — throws TypeError for number argument', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const err = t.throws(() => pt.buildBy(42));
-  t.regex(err.message, /expected an array.*filter function/i);
+test('buildBy(fn) — predicate does not receive files when fileVisible is false', t => {
+  const seen = [];
+  new PathTreeify({ base: tmpRoot }).buildBy(name => { seen.push(name); return false; });
+  t.false(seen.includes('README.md'));
+  t.false(seen.includes('logo.png'));
 });
 
-test('buildBy — throws TypeError for null argument', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const err = t.throws(() => pt.buildBy(null));
-  t.regex(err.message, /expected an array.*filter function/i);
+test('buildBy(fn) — predicate receives files when fileVisible is true', t => {
+  const seen = [];
+  new PathTreeify({ base: tmpRoot, fileVisible: true })
+    .buildBy(name => { seen.push(name); return false; });
+  t.true(seen.includes('README.md'));
 });
 
-test('buildBy — throws TypeError for object argument', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const err = t.throws(() => pt.buildBy({}));
-  t.regex(err.message, /expected an array.*filter function/i);
+// ─────────────────────────────────────────────────────────────────────────────
+// buildBy — invalid argument types
+// ─────────────────────────────────────────────────────────────────────────────
+
+const invalidArgs = [42, null, {}, 'src', true, undefined];
+for (const arg of invalidArgs) {
+  test(`buildBy — throws TypeError for argument: ${JSON.stringify(arg)}`, t => {
+    const err = t.throws(() => new PathTreeify({ base: tmpRoot }).buildBy(arg));
+    t.regex(err.message, /expected an array.*filter function/i);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PathTreeNode.getPath()
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('getPath() — root node returns empty relative and base as absolute', t => {
+  const root = new PathTreeify({ base: tmpRoot }).build();
+  const { relative, absolute } = root.getPath();
+  t.is(relative, '');
+  t.is(absolute, resolve(tmpRoot, ''));
 });
 
-test('buildBy — throws TypeError for string argument', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const err = t.throws(() => pt.buildBy('src'));
-  t.regex(err.message, /expected an array.*filter function/i);
-});
-
-// ─────────────────────────────────────────────
-// getPathBy()
-// ─────────────────────────────────────────────
-
-test('getPathBy() — correct relative path for top-level node', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.build();
-  const src = root.children.find(n => n.value === 'src');
-  const { relative, absolute } = pt.getPathBy(src);
+test('getPath() — top-level node returns its name as relative', t => {
+  const root = new PathTreeify({ base: tmpRoot }).build();
+  const src  = root.children.find(n => n.value === 'src');
+  const { relative, absolute } = src.getPath();
   t.is(relative, 'src');
   t.is(absolute, resolve(tmpRoot, 'src'));
 });
 
-test('getPathBy() — correct relative path for nested node', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.build();
-  const src = root.children.find(n => n.value === 'src');
+test('getPath() — nested node returns sep-joined relative path', t => {
+  const root       = new PathTreeify({ base: tmpRoot }).build();
+  const src        = root.children.find(n => n.value === 'src');
   const components = src.children.find(n => n.value === 'components');
-  const { relative, absolute } = pt.getPathBy(components);
+  const { relative, absolute } = components.getPath();
   t.is(relative, `src${sep}components`);
   t.is(absolute, resolve(tmpRoot, 'src', 'components'));
 });
 
-test('getPathBy() — absolute path exists on disk', t => {
-  const pt = new PathTreeify({ base: tmpRoot });
-  const root = pt.build();
-  const dist = root.children.find(n => n.value === 'dist');
-  const assets = dist.children.find(n => n.value === 'assets');
-  t.true(existsSync(pt.getPathBy(assets).absolute));
+test('getPath() — 3-level deep node returns correct path', t => {
+  const deepRoot = join('/tmp', `pt-deep-${Date.now()}`);
+  mkdirSync(join(deepRoot, 'a', 'b', 'c'), { recursive: true });
+  try {
+    const root = new PathTreeify({ base: deepRoot }).build();
+    const a = root.children.find(n => n.value === 'a');
+    const b = a.children.find(n => n.value === 'b');
+    const c = b.children.find(n => n.value === 'c');
+    const { relative, absolute } = c.getPath();
+    t.is(relative, `a${sep}b${sep}c`);
+    t.is(absolute, resolve(deepRoot, 'a', 'b', 'c'));
+  } finally {
+    rmSync(deepRoot, { recursive: true, force: true });
+  }
 });
 
-test('getPathBy() — correct path for file node when fileVisible: true', t => {
-  const pt = new PathTreeify({ base: tmpRoot, fileVisible: true });
-  const root = pt.build();
+test('getPath() — absolute path exists on disk', t => {
+  const root   = new PathTreeify({ base: tmpRoot }).build();
+  const dist   = root.children.find(n => n.value === 'dist');
+  const assets = dist.children.find(n => n.value === 'assets');
+  t.true(existsSync(assets.getPath().absolute));
+});
+
+test('getPath() — file node returns correct path when fileVisible: true', t => {
+  const root   = new PathTreeify({ base: tmpRoot, fileVisible: true }).build();
   const readme = root.children.find(n => n.value === 'README.md');
-  const { relative, absolute } = pt.getPathBy(readme);
+  const { relative, absolute } = readme.getPath();
   t.is(relative, 'README.md');
   t.is(absolute, resolve(tmpRoot, 'README.md'));
 });
 
-// ─────────────────────────────────────────────
-// Edge cases — empty base directory
-// ─────────────────────────────────────────────
 
-test('build() — empty base returns root with no children', t => {
-  const emptyDir = join('/tmp', `path-treeify-empty-${Date.now()}`);
+// ─────────────────────────────────────────────────────────────────────────────
+// Edge cases
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('build() — empty base directory returns root with no children', t => {
+  const emptyDir = join('/tmp', `pt-empty-${Date.now()}`);
   mkdirSync(emptyDir, { recursive: true });
   try {
     t.is(new PathTreeify({ base: emptyDir }).build().children.length, 0);
@@ -472,56 +499,41 @@ test('build() — empty base returns root with no children', t => {
   }
 });
 
-// ─────────────────────────────────────────────
-// Edge cases — deeply nested single branch
-// ─────────────────────────────────────────────
-
 test('build() — deeply nested branch has correct parent chain', t => {
-  const deepRoot = join('/tmp', `path-treeify-deep-${Date.now()}`);
+  const deepRoot = join('/tmp', `pt-deep2-${Date.now()}`);
   mkdirSync(join(deepRoot, 'a', 'b', 'c'), { recursive: true });
   try {
     const root = new PathTreeify({ base: deepRoot }).build();
     const a = root.children.find(n => n.value === 'a');
-    const b = a?.children.find(n => n.value === 'b');
-    const c = b?.children.find(n => n.value === 'c');
-    t.truthy(a); t.truthy(b); t.truthy(c);
+    const b = a.children.find(n => n.value === 'b');
+    const c = b.children.find(n => n.value === 'c');
     t.is(a.parent, root);
     t.is(b.parent, a);
     t.is(c.parent, b);
+    t.is(c.children.length, 0);
   } finally {
     rmSync(deepRoot, { recursive: true, force: true });
   }
 });
 
-test('build() — deeply nested branch getPath returns full relative path', t => {
-  const deepRoot = join('/tmp', `path-treeify-deep2-${Date.now()}`);
-  mkdirSync(join(deepRoot, 'a', 'b', 'c'), { recursive: true });
-  try {
-    const pt = new PathTreeify({ base: deepRoot });
-    const root = pt.build();
-    const a = root.children.find(n => n.value === 'a');
-    const b = a?.children.find(n => n.value === 'b');
-    const c = b?.children.find(n => n.value === 'c');
-    t.is(pt.getPathBy(c).relative, `a${sep}b${sep}c`);
-  } finally {
-    rmSync(deepRoot, { recursive: true, force: true });
-  }
+test('build() — sibling nodes do not share children arrays', t => {
+  const root    = new PathTreeify({ base: tmpRoot }).build();
+  const src     = root.children.find(n => n.value === 'src');
+  const public_ = root.children.find(n => n.value === 'public');
+  t.not(src.children, public_.children);
 });
 
-// ─────────────────────────────────────────────
-// Edge cases — fileVisible with mixed content
-// ─────────────────────────────────────────────
+test('build() — multiple calls return independent trees', t => {
+  const pt    = new PathTreeify({ base: tmpRoot });
+  const root1 = pt.build();
+  const root2 = pt.build();
+  t.not(root1, root2);
+  t.not(root1.children, root2.children);
+});
 
-test('fileVisible: true — mixed dir/file tree has both types as siblings', t => {
-  const mixedRoot = join('/tmp', `path-treeify-mixed-${Date.now()}`);
-  createTempTree({ subdir: {}, 'file.txt': null }, mixedRoot);
-  try {
-    const root = new PathTreeify({ base: mixedRoot, fileVisible: true }).build();
-    const dir  = root.children.find(n => n.value === 'subdir');
-    const file = root.children.find(n => n.value === 'file.txt');
-    t.is(dir.type,  PathTreeNodeType.Dir);
-    t.is(file.type, PathTreeNodeType.File);
-  } finally {
-    rmSync(mixedRoot, { recursive: true, force: true });
-  }
+test('buildBy([]) and build() — returned nodes are independent objects', t => {
+  const pt      = new PathTreeify({ base: tmpRoot });
+  const fromAll = pt.build().children.find(n => n.value === 'src');
+  const fromBy  = pt.buildBy(['src']).children.find(n => n.value === 'src');
+  t.not(fromAll, fromBy);
 });
