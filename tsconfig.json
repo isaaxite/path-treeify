@@ -11,5 +11,5 @@
     "declarationDir": "./dist/types",
     "emitDeclarationOnly": true
   },
-  "include": ["./**/*.ts"]
+  "include": ["./index.ts"]
 }
