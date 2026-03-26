@@ -6,6 +6,9 @@ on:
       commit_sha:
         description: 'Commit SHA to report coverage for'
         required: false
+      pr_number:
+        description: 'Release PR Number'
+        required: false
       publish_type:
         description: 'Tags of package'
         required: true
@@ -47,31 +50,49 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:coverage
 
-      - name: Run tests with junit
-        run: npm run test:junit
-
-      - name: Inject classname into testcase
-        run: |
-          sed -i 's/<testcase name="/<testcase classname="path-treeify.Default" name="/g' reports/junit.xml
-
       - name: Upload to Coveralls
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: ./reports/coverage/lcov.info
 
-      - name: Publish test report
-        uses: dorny/test-reporter@v1
-        if: always()
+      - name: Get commit info
+        if: inputs.pr_number != ''
+        id: commit_info
+        run: |
+          COMMIT_HASH="$(git rev-parse --short HEAD)"
+          COMMIT_URL="https://github.com/${GITHUB_REPOSITORY}/commit/$(git rev-parse HEAD)"
+          echo "title=AVA Test Results ([${{ inputs.publish_type }}-${COMMIT_HASH}](${COMMIT_URL}))" >> $GITHUB_OUTPUT
+
+      - name: Run tests with markdown
+        if: inputs.pr_number != ''
+        run: npm run test:md --title="${{ steps.commit_info.outputs.title }}"
+
+      - name: Generate test report
+        if: inputs.pr_number != ''
+        id: test_report
+        run: |
+          echo "comment<<EOF" >> $GITHUB_OUTPUT
+          cat ./reports/ava-test.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Comment on Release PR
+        if: inputs.pr_number != ''
+        uses: actions/github-script@v8
         with:
-          name: AVA Tests
-          path: reports/junit.xml
-          reporter: java-junit
-          fail-on-error: false
+          script: |
+            const comment = `${{ steps.test_report.outputs.comment }}`;
+            const prNumber = ${{ inputs.pr_number }};
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment,
+            });
 
   trigger-build-workflow:
     needs: ['converage-unitests']
-    if: inputs.publish_type != 'none'
+    if: inputs.publish_type == 'none'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v8
