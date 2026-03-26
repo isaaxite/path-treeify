@@ -35,9 +35,6 @@ importers:
       tap-json:
         specifier: ^1.0.0
         version: 1.0.0
-      tap-xunit:
-        specifier: ^2.4.1
-        version: 2.4.1
       tslib:
         specifier: ^2.8.1
         version: 2.8.1
@@ -687,9 +684,6 @@ packages:
     resolution: {integrity: sha512-kVscqXk4OCp68SZ0dkgEKVi6/8ij300KBWTJq32P/dYeWTSwK41WyTxalN1eRmA5Z9UU/LX9D7FWSmV9SAYx6g==}
     engines: {node: '>=0.10.0'}
 
-  events-to-array@1.1.2:
-    resolution: {integrity: sha512-inRWzRY7nG+aXZxBzEqYKB3HPgwflZRopAjDCHv0whhRx+MTUr1ei0ICZUypdyE0HRm4L2d5VEcIqLD6yl+BFA==}
-
   fast-diff@1.3.0:
     resolution: {integrity: sha512-VxPP4NqbUjj6MaAOafWeUn2cXWLcCtljklUtZf0Ind4XQ+QPtmA0b18zZy0jIQx+ExRVCR/ZQpBmik5lXshNsw==}
 
@@ -1195,14 +1189,6 @@ packages:
   tap-parser@0.4.3:
     resolution: {integrity: sha512-jp7SlKlSTgQjRhiiZ99NnkFIhESAhDa2OQfQh5n/XFiAWQm1SyAiYvmhAB128wu2vU1I/O4lBv5Zr+NBKtbZQQ==}
 
-  tap-parser@1.2.2:
-    resolution: {integrity: sha512-uXKcosa0qoSjeh73dhmX+OpJvpigDxUciOhBcbGUKtmwzEFJjUT1Ql5dpg4M9I1UjXT9b+6n1W05FB8QmKossA==}
-    hasBin: true
-
-  tap-xunit@2.4.1:
-    resolution: {integrity: sha512-qcZStDtjjYjMKAo7QNiCtOW256g3tuSyCSe5kNJniG1Q2oeOExJq4vm8CwboHZURpkXAHvtqMl4TVL7mcbMVVA==}
-    hasBin: true
-
   tar@7.5.12:
     resolution: {integrity: sha512-9TsuLcdhOn4XztcQqhNyq1KOwOOED/3k58JAvtULiYqbO8B/0IBAAIE1hj0Svmm58k27TmcigyDI0deMlgG3uw==}
     engines: {node: '>=18'}
@@ -1301,10 +1287,6 @@ packages:
   write-file-atomic@7.0.1:
     resolution: {integrity: sha512-OTIk8iR8/aCRWBqvxrzxR0hgxWpnYBblY1S5hDWBQfk/VFmJwzmJgQFN3WsoUKHISv2eAwe+PpbUzyL1CKTLXg==}
     engines: {node: ^20.17.0 || >=22.9.0}
-
-  xmlbuilder@4.2.1:
-    resolution: {integrity: sha512-oEePiEefhQhAeUnwRnIBLBWmk/fsWWbQ53EEWsRuzECbQ3m5o/Esmq6H47CYYwSLW+Ynt0rS9hd0pd2ogMAWjg==}
-    engines: {node: '>=0.8.0'}
 
   xtend@2.1.2:
     resolution: {integrity: sha512-vMNKzr2rHP9Dp/e1NQFnLQlwlhp9L/LfvnsVdHxN1f+uggyVI3i08uD14GPvCToPkdsRfyPqIyYGmIk58V98ZQ==}
@@ -1873,8 +1855,6 @@ snapshots:
 
   esutils@2.0.3: {}
 
-  events-to-array@1.1.2: {}
-
   fast-diff@1.3.0: {}
 
   fast-glob@3.3.3:
@@ -2359,23 +2339,6 @@ snapshots:
       inherits: 2.0.4
       readable-stream: 1.1.14
 
-  tap-parser@1.2.2:
-    dependencies:
-      events-to-array: 1.1.2
-      inherits: 2.0.4
-      js-yaml: 3.14.2
-    optionalDependencies:
-      readable-stream: 2.3.8
-
-  tap-xunit@2.4.1:
-    dependencies:
-      duplexer: 0.1.2
-      minimist: 1.2.8
-      tap-parser: 1.2.2
-      through2: 2.0.5
-      xmlbuilder: 4.2.1
-      xtend: 4.0.2
-
   tar@7.5.12:
     dependencies:
       '@isaacs/fs-minipass': 4.0.1
@@ -2474,10 +2437,6 @@ snapshots:
   write-file-atomic@7.0.1:
     dependencies:
       signal-exit: 4.1.0
-
-  xmlbuilder@4.2.1:
-    dependencies:
-      lodash: 4.17.23
 
   xtend@2.1.2:
     dependencies:
