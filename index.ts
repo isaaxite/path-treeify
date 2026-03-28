@@ -1,6 +1,6 @@
 import { readdirSync } from 'fs';
 import { join, sep, resolve, dirname } from 'path';
-import { defineReadOnlyProps, PathTreeNodeImp, PathValidator } from './src/utils';
+import { defineReadOnlyProps, getSafePathType, PathTreeNodeImp, PathValidator } from './src/utils';
 import { FilterFunction, PathTreeifyProps, PathTreeNode, PathTreeNodeKind } from './src/types';
 
 export { PathTreeifyProps, PathTreeNodeKind, PathTreeNode } from './src/types';
@@ -12,6 +12,7 @@ export class PathTreeify {
   /** When true, files are included as leaf nodes during traversal. Defaults to false */
   private _fileVisible = false;
 
+  /** When true, absolute paths are cached on each node after the first retrieval to speed up subsequent `getPath` calls at the cost of higher memory usage. Defaults to false */
   private _usePathCache: boolean = false;
 
   /**
@@ -38,6 +39,7 @@ export class PathTreeify {
       throw new Error(`${base} is not a dirPath!`);
     }
 
+    /** Define read-only properties for the instance. */
     defineReadOnlyProps(this, {
       _usePathCache: Boolean(usePathCache),
       _base: base,
@@ -101,13 +103,7 @@ export class PathTreeify {
   private buildChildren(dirPath: string, parent: PathTreeNode, segments?: string[]): PathTreeNode[] {
     const children: PathTreeNode[] = [];
     const depth = parent.depth + 1;
-    let names = segments;
-
-    try {
-      names = readdirSync(dirPath);
-    } catch (error) {
-      return children;
-    }
+    const names = segments || readdirSync(dirPath);
 
     for (const name of names) {
       const subPath = join(dirPath, name);
@@ -116,18 +112,24 @@ export class PathTreeify {
         continue;
       }
 
+      const pathType = getSafePathType(subPath);
       const node = this.initNode();
       node.depth = depth;
       node.value = name;
       node.parent = parent;
       children.push(node);
 
-      if (this._fileVisible && PathValidator.isFile(subPath)) {
-        node.type = PathTreeNodeKind.File;
+      if (this._fileVisible && pathType === PathTreeNodeKind.File) {
+        node.type = pathType;
         continue;
       }
 
-      node.type = PathTreeNodeKind.Dir;
+      if (pathType !== PathTreeNodeKind.Dir) {
+        node.type = pathType;
+        continue;
+      }
+
+      node.type = pathType;
       node.children = this.buildChildren(subPath, node);
     }
 
