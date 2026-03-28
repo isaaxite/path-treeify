@@ -160,12 +160,12 @@ test('build() — root parent is null', t => {
   t.is(new PathTreeify({ base: tmpRoot }).build().parent, null);
 });
 
-test('build() — root value is empty string', t => {
-  t.is(new PathTreeify({ base: tmpRoot }).build().value, '');
+test('build() — root value is base', t => {
+  t.is(new PathTreeify({ base: tmpRoot }).build().value, tmpRoot);
 });
 
-test('build() — root type is Unknown', t => {
-  t.is(new PathTreeify({ base: tmpRoot }).build().type, PathTreeNodeKind.Unknown);
+test('build() — root type is Dir', t => {
+  t.is(new PathTreeify({ base: tmpRoot }).build().type, PathTreeNodeKind.Dir);
 });
 
 test('build() — root children is an array', t => {
