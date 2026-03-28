@@ -240,8 +240,14 @@ export class PathTreeify {
    */
   private buildChildren(dirPath: string, parent: PathTreeNode, segments?: string[]): PathTreeNode[] {
     const children: PathTreeNode[] = [];
-    const names = segments || readdirSync(dirPath);
     const depth = parent.depth + 1;
+    let names = segments;
+
+    try {
+      names = readdirSync(dirPath);
+    } catch (error) {
+      return children;
+    }
 
     for (const name of names) {
       const subPath = join(dirPath, name);
