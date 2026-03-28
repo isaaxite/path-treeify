@@ -24,11 +24,20 @@ export function defineReadOnlyProps(obj: any, props: { [key: string]: any }) {
 export function getPathType(p: string): PathTreeNodeKind {
   try {
     const stat = statSync(p);
-    if (stat.isDirectory()) return PathTreeNodeKind.Dir;
-    if (stat.isFile())      return PathTreeNodeKind.File;
+    if (stat.isDirectory()) {
+      try {
+        accessSync(p, constants.X_OK);
+      } catch {
+        return PathTreeNodeKind.PermissionDenied;
+      }
+      return PathTreeNodeKind.Dir;
+    }
+    if (stat.isFile()) return PathTreeNodeKind.File;
     return PathTreeNodeKind.Other;
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'EACCES') return PathTreeNodeKind.PermissionDenied;
+    if (code !== 'ENOENT') throw e;
   }
 
   try {
@@ -36,16 +45,15 @@ export function getPathType(p: string): PathTreeNodeKind {
     if (lstat.isSymbolicLink()) return PathTreeNodeKind.BrokenSymlink;
     return PathTreeNodeKind.Other;
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'EACCES') return PathTreeNodeKind.PermissionDenied;
+    if (code !== 'ENOENT') throw e;
   }
 
   return PathTreeNodeKind.NotFound;
 }
 
-/*
-* A safer version of getPathType that returns PathTreeNodeKind.Error if any unexpected 
-* error occurs during stat/lstat operations.
-*/
+/** A safer wrapper around getPathType that catches any unexpected errors and returns PathTreeNodeKind.Error instead. This is useful for scenarios where we want to classify inaccessible paths without crashing the entire process. */
 export function getSafePathType(p: string): PathTreeNodeKind {
   try {
     return getPathType(p);
@@ -53,38 +61,7 @@ export function getSafePathType(p: string): PathTreeNodeKind {
     return PathTreeNodeKind.Error;  
   }
 }
-
-/** Utility class for validating file system paths */
-export class PathValidator {
-  /** Returns true if the path exists and is accessible */
-  static isValid(path: string): boolean {
-    try {
-      accessSync(path, constants.F_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /** Returns true if the path points to a directory */
-  static isDirectory(path: string): boolean {
-    try {
-      return statSync(path).isDirectory();
-    } catch {
-      return false;
-    }
-  }
-
-  /** Returns true if the path points to a regular file */
-  static isFile(path: string): boolean {
-    try {
-      return statSync(path).isFile();
-    } catch {
-      return false;
-    }
-  }
-}
-
+/** Implementation of the PathTreeNode interface. This class is not exported; consumers receive nodes through the PathTreeify API as the PathTreeNode interface type. */
 export class PathTreeNodeImp implements PathTreeNode {
   depth: number = -1;
   parent: PathTreeNode | null = null;

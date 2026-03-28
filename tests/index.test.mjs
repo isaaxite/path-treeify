@@ -72,22 +72,22 @@ test('PathTreeNodeKind — has correct string values', t => {
 
 test('constructor — throws when base is omitted', t => {
   const err = t.throws(() => new PathTreeify({}));
-  t.regex(err.message, /not a valid path/i);
+  t.regex(err.message, /not a valid dirPath/i);
 });
 
 test('constructor — throws when base is an empty string', t => {
   const err = t.throws(() => new PathTreeify({ base: '' }));
-  t.regex(err.message, /not a valid path/i);
+  t.regex(err.message, /not a valid dirPath/i);
 });
 
 test('constructor — throws when base does not exist', t => {
   const err = t.throws(() => new PathTreeify({ base: '/no/such/path' }));
-  t.regex(err.message, /not a valid path/i);
+  t.regex(err.message, /not a valid dirPath/i);
 });
 
 test('constructor — throws when base points to a file', t => {
   const err = t.throws(() => new PathTreeify({ base: join(tmpRoot, 'README.md') }));
-  t.regex(err.message, /not a dirPath/i);
+  t.regex(err.message, /not a valid dirPath/i);
 });
 
 test('constructor — succeeds with a valid directory', t => {

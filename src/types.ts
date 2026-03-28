@@ -21,14 +21,15 @@ export interface PathTreeifyProps {
 
 /** Classification of a node in the path tree */
 export enum PathTreeNodeKind {
-  Dir           = 'dir',
-  File          = 'file',
+  Dir               = 'dir',
+  File              = 'file',
   /** Assigned before the node's type has been resolved */
-  Unknown       = 'unknown',
-  BrokenSymlink = 'broken_symlink',
-  Other         = 'other',
-  NotFound      = 'not_found',
-  Error         = 'error',
+  Unknown           = 'unknown',
+  BrokenSymlink     = 'broken_symlink',
+  Other             = 'other',
+  NotFound          = 'not_found',
+  PermissionDenied  = 'permission_denied',
+  Error             = 'error',
 }
 
 /**

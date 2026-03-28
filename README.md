@@ -215,9 +215,14 @@ An enum classifying each node's filesystem type.
 
 ```ts
 enum PathTreeNodeKind {
-  Dir     = 'dir',
-  File    = 'file',
-  Unknown = 'unknown', // assigned before the type is resolved
+  Dir               = 'dir',
+  File              = 'file',
+  Unknown           = 'unknown',            // assigned before the type is resolved
+  BrokenSymlink     = 'broken_symlink',
+  Other             = 'other',              // FIFO/socket etc.
+  NotFound          = 'not_found',
+  PermissionDenied  = 'permission_denied',
+  Error             = 'error',
 }
 ```
 

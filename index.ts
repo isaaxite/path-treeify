@@ -1,6 +1,6 @@
 import { readdirSync } from 'fs';
 import { join, sep, resolve, dirname } from 'path';
-import { defineReadOnlyProps, getSafePathType, PathTreeNodeImp, PathValidator } from './src/utils';
+import { defineReadOnlyProps, getSafePathType, PathTreeNodeImp } from './src/utils';
 import { FilterFunction, PathTreeifyProps, PathTreeNode, PathTreeNodeKind } from './src/types';
 
 export { PathTreeifyProps, PathTreeNodeKind, PathTreeNode } from './src/types';
@@ -23,6 +23,7 @@ export class PathTreeify {
 
   constructor(props: Partial<PathTreeifyProps>) {
     const { filter, base, fileVisible, usePathCache } = props;
+    const pathType = getSafePathType(base || '');
 
     if (typeof filter !== 'undefined') {
       this.validateFilter(filter);
@@ -31,12 +32,8 @@ export class PathTreeify {
       });
     }
 
-    if (!base || !PathValidator.isValid(base)) {
-      throw new Error(`${base} is not a valid path!`);
-    }
-
-    if (!PathValidator.isDirectory(base)) {
-      throw new Error(`${base} is not a dirPath!`);
+    if (pathType !== PathTreeNodeKind.Dir) {
+      throw new Error(`${base} not a valid dirPath!`);
     }
 
     /** Define read-only properties for the instance. */
@@ -55,7 +52,7 @@ export class PathTreeify {
    * @param name - Entry name (filename or directory name)
    */
   private applyFilter(absPath: string, name: string): boolean {
-    if (!this._fileVisible && !PathValidator.isDirectory(absPath)) {
+    if (!this._fileVisible && getSafePathType(absPath) !== PathTreeNodeKind.Dir) {
       return false;
     }
     return this._userFilter
@@ -152,13 +149,20 @@ export class PathTreeify {
       }
 
       const absPath = resolve(this._base, it);
+      const pathType = getSafePathType(absPath);
 
-      if (!PathValidator.isValid(absPath)) {
+      if ([
+        PathTreeNodeKind.NotFound,
+        PathTreeNodeKind.PermissionDenied,
+        PathTreeNodeKind.Other,
+        PathTreeNodeKind.Error,
+        PathTreeNodeKind.BrokenSymlink,
+      ].includes(pathType)) {
         throw new Error(`Path does not exist or is not accessible: ${absPath} (from relative path: ${it})`);
       }
 
-      if (!PathValidator.isDirectory(absPath)) {
-        if (!this._fileVisible || !PathValidator.isFile(absPath)) {
+      if (pathType !== PathTreeNodeKind.Dir) {
+        if (!this._fileVisible || pathType !== PathTreeNodeKind.File) {
           throw new Error(`Path is not a directory: ${absPath} (from relative path: ${it})`);
         }
       }

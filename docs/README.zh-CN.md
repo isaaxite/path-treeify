@@ -212,9 +212,14 @@ interface PathTreeNode {
 
 ```ts
 enum PathTreeNodeKind {
-  Dir     = 'dir',
-  File    = 'file',
-  Unknown = 'unknown', // 类型尚未解析时的初始值
+  Dir               = 'dir',
+  File              = 'file',
+  Unknown           = 'unknown',            // 类型尚未解析时的初始值
+  BrokenSymlink     = 'broken_symlink',
+  Other             = 'other',              // FIFO/socket 等，极少见
+  NotFound          = 'not_found',
+  PermissionDenied  = 'permission_denied',
+  Error             = 'error',
 }
 ```
 
