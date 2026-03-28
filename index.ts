@@ -1,172 +1,33 @@
-import { accessSync, constants, statSync, readdirSync } from 'fs';
+import { readdirSync } from 'fs';
 import { join, sep, resolve, dirname } from 'path';
+import { defineReadOnlyProps, PathTreeNodeImp, PathValidator } from './src/utils';
+import { FilterFunction, PathTreeifyProps, PathTreeNode, PathTreeNodeKind } from './src/types';
 
-/** A filter function that determines whether an entry should be included in the tree */
-type FilterFunction = (params: { name: string; dirPath: string }) => boolean;
-
-/** Constructor options for PathTreeify */
-interface PathTreeifyProps {
-  /** The root directory to scan */
-  base: string;
-  /** Optional filter applied to every entry during recursive traversal */
-  filter?: FilterFunction;
-  /** When true, files are included as leaf nodes alongside directories. Defaults to false */
-  fileVisible?: boolean;
-
-  /**
-   * When true, the result of {@link PathTreeNode.getPath} is memoised on each node
-   * after the first call. Subsequent calls return the same object reference without
-   * re-walking the parent chain. Useful when nodes are accessed repeatedly.
-   * Defaults to false.
-   */
-  usePathCache?: boolean;
-}
-
-/** Utility class for validating file system paths */
-class PathValidator {
-  /** Returns true if the path exists and is accessible */
-  static isValid(path: string): boolean {
-    try {
-      accessSync(path, constants.F_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /** Returns true if the path points to a directory */
-  static isDirectory(path: string): boolean {
-    try {
-      return statSync(path).isDirectory();
-    } catch {
-      return false;
-    }
-  }
-
-  /** Returns true if the path points to a regular file */
-  static isFile(path: string): boolean {
-    try {
-      return statSync(path).isFile();
-    } catch {
-      return false;
-    }
-  }
-}
-
-/** Classification of a node in the path tree */
-export enum PathTreeNodeKind {
-  Dir = 'dir',
-  File = 'file',
-  /** Assigned before the node's type has been resolved */
-  Unknown = 'unknown',
-}
-
-/**
- * Public interface for a node in the path tree.
- * Consumers receive this type; the internal implementation class is not exported.
- */
-export interface PathTreeNode {
-  /** Distance from the root node; root itself is 0, its direct children are 1, and so on */
-  depth: number;
-  /** Reference to the parent node; null for the root node */
-  parent: PathTreeNode | null;
-  /** The entry name of this node (not a full path) */
-  value: string;
-  /** Child nodes; non-empty only for directory nodes */
-  children: PathTreeNode[];
-  /** Whether this node is a directory, a file, or not yet resolved */
-  type: PathTreeNodeKind;
-  /**
-   * Walks up the parent chain to compute this node's relative and absolute paths.
-   * When the owning {@link PathTreeify} instance was created with `usePathCache: true`,
-   * the result is memoised after the first call and the same object is returned on
-   * every subsequent call.
-   * @returns `relative` — path from the tree root; `absolute` — fully resolved path on disk
-   */
-  getPath(): { relative: string; absolute: string };
-}
-
-/**
- * Shared prototype object for all nodes produced by a single {@link PathTreeify} instance.
- * Stores `base` and `usePathCache` once on the prototype rather than duplicating them
- * across every node instance, so that `getPath()` can resolve absolute paths without
- * each node holding a redundant copy.
- */
-class PathTreeNodeShared {
-  private base: string;
-  private usePathCache: boolean = false;
-
-  constructor(props: { base: string, usePathCache?: boolean }) {
-    this.base = props.base;
-    if (typeof props.usePathCache === 'boolean') {
-      this.usePathCache = props.usePathCache;
-    }
-  }
-
-  /**
-   * Walks up the parent chain to compute this node's relative and absolute paths.
-   *
-   * When `usePathCache` is `false` (default), the parent chain is walked on every call
-   * and a new result object is returned each time.
-   *
-   * When `usePathCache` is `true`, the result is computed once and stored as `_pathCache`
-   * directly on the node instance. Subsequent calls return the cached object, making
-   * repeated access O(1) after the first call.
-   *
-   * @returns `relative` — sep-joined path from the tree root to this node;
-   *          `absolute` — fully resolved path on disk
-   */
-  getPath() {
-    let self = this as any;
-    const getPathForce = () => {
-      let relative = '';
-      let current: PathTreeNode = this as any;
-      while (current.parent) {
-        relative = relative ? `${current.value}${sep}${relative}` : current.value;
-        current = current.parent;
-      }
-      return { relative, absolute: resolve(self.base, relative) };
-    };
-
-    if (!self.usePathCache) {
-      return getPathForce();
-    }
-
-    if (!self._pathCache) {
-      self._pathCache = getPathForce();
-    }
-    return self._pathCache;
-  }
-}
+export { PathTreeifyProps, PathTreeNodeKind, PathTreeNode } from './src/types';
 
 /** Builds a tree of {@link PathTreeNode} entries rooted at a given base path */
 export class PathTreeify {
   /** The root directory to scan */
-  private base: string;
-  /**
-   * Shared prototype instance for nodes produced by this builder.
-   * All nodes created via {@link initNode} inherit `base` and `getPath` from this object,
-   * avoiding per-node storage of the base path string.
-   */
-  private pathTreeNodeShared: PathTreeNodeShared;
+  private _base: string = '';
+  /** When true, files are included as leaf nodes during traversal. Defaults to false */
+  private _fileVisible = false;
+
+  private _usePathCache: boolean = false;
+
   /**
    * Optional user-supplied filter. When set, every entry must pass this predicate
    * in addition to the built-in visibility check.
    */
-  private userFilter?: FilterFunction;
-  /** When true, files are included as leaf nodes during traversal. Defaults to false */
-  private fileVisible = false;
+  private _userFilter?: FilterFunction;
 
   constructor(props: Partial<PathTreeifyProps>) {
     const { filter, base, fileVisible, usePathCache } = props;
 
-    if (typeof fileVisible === 'boolean' && fileVisible) {
-      this.fileVisible = fileVisible;
-    }
-
     if (typeof filter !== 'undefined') {
       this.validateFilter(filter);
-      this.userFilter = filter;
+      defineReadOnlyProps(this, {
+        _userFilter: filter,
+      });
     }
 
     if (!base || !PathValidator.isValid(base)) {
@@ -177,8 +38,11 @@ export class PathTreeify {
       throw new Error(`${base} is not a dirPath!`);
     }
 
-    this.base = base;
-    this.pathTreeNodeShared = new PathTreeNodeShared({ base, usePathCache });
+    defineReadOnlyProps(this, {
+      _usePathCache: Boolean(usePathCache),
+      _base: base,
+      _fileVisible: typeof fileVisible === 'boolean' && fileVisible ? fileVisible : false,
+    });
   }
 
   /**
@@ -189,11 +53,11 @@ export class PathTreeify {
    * @param name - Entry name (filename or directory name)
    */
   private applyFilter(absPath: string, name: string): boolean {
-    if (!this.fileVisible && !PathValidator.isDirectory(absPath)) {
+    if (!this._fileVisible && !PathValidator.isDirectory(absPath)) {
       return false;
     }
-    return this.userFilter
-      ? this.userFilter({ name, dirPath: dirname(absPath) })
+    return this._userFilter
+      ? this._userFilter({ name, dirPath: dirname(absPath) })
       : true;
   }
 
@@ -217,13 +81,9 @@ export class PathTreeify {
    * `depth` is initialised to `-1` and must be set by the caller.
    */
   private initNode(): PathTreeNode {
-    const cache = Object.create(this.pathTreeNodeShared);
-    const node = Object.create(cache);
-    node.parent = null;
-    node.value = '';
-    node.children = [];
-    node.type = PathTreeNodeKind.Unknown;
-    node.depth = -1;
+    const node = new PathTreeNodeImp({
+      usePathCache: this._usePathCache,
+    });
     return node;
   }
 
@@ -262,7 +122,7 @@ export class PathTreeify {
       node.parent = parent;
       children.push(node);
 
-      if (this.fileVisible && PathValidator.isFile(subPath)) {
+      if (this._fileVisible && PathValidator.isFile(subPath)) {
         node.type = PathTreeNodeKind.File;
         continue;
       }
@@ -289,14 +149,14 @@ export class PathTreeify {
         throw new Error(`Item at index ${i} is not a string, got ${typeof it}`);
       }
 
-      const absPath = resolve(this.base, it);
+      const absPath = resolve(this._base, it);
 
       if (!PathValidator.isValid(absPath)) {
         throw new Error(`Path does not exist or is not accessible: ${absPath} (from relative path: ${it})`);
       }
 
       if (!PathValidator.isDirectory(absPath)) {
-        if (!this.fileVisible || !PathValidator.isFile(absPath)) {
+        if (!this._fileVisible || !PathValidator.isFile(absPath)) {
           throw new Error(`Path is not a directory: ${absPath} (from relative path: ${it})`);
         }
       }
@@ -320,8 +180,8 @@ export class PathTreeify {
    * {@link applyFilter}.
    */
   private getAllEntriesUnderBase(): string[] {
-    return readdirSync(this.base).filter(name => {
-      const abs = resolve(this.base, name);
+    return readdirSync(this._base).filter(name => {
+      const abs = resolve(this._base, name);
       return this.applyFilter(abs, name);
     });
   }
@@ -336,7 +196,9 @@ export class PathTreeify {
   private buildBySegments(segments: string[]): PathTreeNode {
     const root = this.initNode();
     root.depth = 0;
-    root.children = this.buildChildren(this.base, root, segments);
+    root.value = this._base;
+    root.type = PathTreeNodeKind.Dir;
+    root.children = this.buildChildren(this._base, root, segments);
     return root;
   }
 
