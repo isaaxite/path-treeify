@@ -32,7 +32,7 @@
     "build": "npm run clean && rollup -c",
     "build:dev": "NODE_ENV=development npm run build",
     "build:prod": "NODE_ENV=production npm run build",
-    "build:watch": "nodemon --watch index.ts -e ts --exec \"npm run build:dev\"",
+    "dev": "nodemon --watch index.ts -e ts --exec \"npm run build:dev\"",
     "check-publish": "npm pack --dry-run",
     "publish:beta": "npm publish --tag beta --access public",
     "publish:latest": "npm publish --tag latest --access public"
