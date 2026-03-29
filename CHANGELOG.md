@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.1](https://github.com/isaaxite/path-treeify/compare/v1.4.0...v1.4.1) (2026-03-28)
+
+
+### Bug Fixes
+
+* handle non-file/dir node.type values ([2968a13](https://github.com/isaaxite/path-treeify/commit/2968a138f06c5beee2ac4706756d5f3f998f208d))
+* handle permission_denied node.type values ([004782a](https://github.com/isaaxite/path-treeify/commit/004782a843ea4de507289d5c1b4b98738396e286))
+* using readdirSync with a bloken symlink ([7becc48](https://github.com/isaaxite/path-treeify/commit/7becc485cac1e6b7d388ca1c47f69e71c2515850))
+
 ## [1.4.0](https://github.com/isaaxite/path-treeify/compare/v1.3.0...v1.4.0) (2026-03-24)
 
 
